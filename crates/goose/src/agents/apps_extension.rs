@@ -276,7 +276,7 @@ impl AppsManagerClient {
         let existing_names = existing_apps.join(", ");
 
         let context: HashMap<&str, &str> = HashMap::new();
-        let system_prompt = render_template("apps_create.md", &context)
+        let system = render_template("apps_create.md", &context)
             .map_err(|e| format!("Failed to render template: {}", e))?;
 
         let user_prompt = format!(
@@ -287,9 +287,11 @@ impl AppsManagerClient {
 
         let messages = vec![Message::user().with_text(&user_prompt)];
         let tools = vec![Self::create_app_content_tool()];
+        let mut model_config = provider.get_model_config();
+        model_config.max_tokens.get_or_insert(16_384);
 
         let (response, _usage) = provider
-            .complete(session_id, &system_prompt, &messages, &tools)
+            .complete_with_model(Some(session_id), &model_config, &system, &messages, &tools)
             .await
             .map_err(|e| format!("LLM call failed: {}", e))?;
 
@@ -306,7 +308,7 @@ impl AppsManagerClient {
         let provider = self.get_provider().await?;
 
         let context: HashMap<&str, &str> = HashMap::new();
-        let system_prompt = render_template("apps_iterate.md", &context)
+        let system = render_template("apps_iterate.md", &context)
             .map_err(|e| format!("Failed to render template: {}", e))?;
 
         let user_prompt = format!(
@@ -318,9 +320,11 @@ impl AppsManagerClient {
 
         let messages = vec![Message::user().with_text(&user_prompt)];
         let tools = vec![Self::update_app_content_tool()];
+        let mut model_config = provider.get_model_config();
+        model_config.max_tokens.get_or_insert(16_384);
 
         let (response, _usage) = provider
-            .complete(session_id, &system_prompt, &messages, &tools)
+            .complete_with_model(Some(session_id), &model_config, &system, &messages, &tools)
             .await
             .map_err(|e| format!("LLM call failed: {}", e))?;
 
