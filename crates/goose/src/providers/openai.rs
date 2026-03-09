@@ -211,6 +211,23 @@ impl OpenAiProvider {
         model_name.starts_with("gpt-5-codex") || model_name.starts_with("gpt-5.1-codex")
     }
 
+    /// Sanitize request payload for non-native OpenAI providers.
+    /// Remaps OpenAI-specific parameters to their compatible equivalents.
+    fn sanitize_request_for_compat(&self, mut payload: Value) -> Value {
+        if self.name == OPEN_AI_PROVIDER_NAME {
+            return payload;
+        }
+
+        if let Some(obj) = payload.as_object_mut() {
+            // Remap max_completion_tokens → max_tokens for OpenAI-compatible providers
+            if let Some(value) = obj.remove("max_completion_tokens") {
+                obj.entry("max_tokens").or_insert(value);
+            }
+        }
+
+        payload
+    }
+
     async fn post(
         &self,
         session_id: Option<&str>,
@@ -327,6 +344,7 @@ impl Provider for OpenAiProvider {
                 &ImageFormat::OpenAi,
                 false,
             )?;
+            let payload = self.sanitize_request_for_compat(payload);
 
             let mut log = RequestLog::start(&self.model, &payload)?;
             let json_response = self
@@ -449,6 +467,7 @@ impl Provider for OpenAiProvider {
                 &ImageFormat::OpenAi,
                 true,
             )?;
+            let payload = self.sanitize_request_for_compat(payload);
             let mut log = RequestLog::start(&self.model, &payload)?;
 
             let response = self
@@ -534,5 +553,85 @@ impl EmbeddingCapable for OpenAiProvider {
             .into_iter()
             .map(|d| d.embedding)
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn make_provider(name: &str) -> OpenAiProvider {
+        OpenAiProvider {
+            api_client: ApiClient::new("http://localhost".to_string(), AuthMethod::NoAuth).unwrap(),
+            base_path: "v1/chat/completions".to_string(),
+            organization: None,
+            project: None,
+            model: ModelConfig::new_or_fail("test-model"),
+            custom_headers: None,
+            supports_streaming: true,
+            name: name.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_sanitize_remaps_max_completion_tokens_for_compat_provider() {
+        let provider = make_provider("mistral");
+        let payload = json!({
+            "model": "mistral-medium-latest",
+            "messages": [],
+            "max_completion_tokens": 16384
+        });
+
+        let result = provider.sanitize_request_for_compat(payload);
+        let obj = result.as_object().unwrap();
+
+        assert!(!obj.contains_key("max_completion_tokens"));
+        assert_eq!(obj.get("max_tokens").unwrap(), &json!(16384));
+    }
+
+    #[test]
+    fn test_sanitize_preserves_existing_max_tokens_for_compat_provider() {
+        let provider = make_provider("mistral");
+        let payload = json!({
+            "model": "mistral-medium-latest",
+            "messages": [],
+            "max_tokens": 4096,
+            "max_completion_tokens": 16384
+        });
+
+        let result = provider.sanitize_request_for_compat(payload);
+        let obj = result.as_object().unwrap();
+
+        assert!(!obj.contains_key("max_completion_tokens"));
+        assert_eq!(obj.get("max_tokens").unwrap(), &json!(4096));
+    }
+
+    #[test]
+    fn test_sanitize_noop_for_native_openai_provider() {
+        let provider = make_provider("openai");
+        let payload = json!({
+            "model": "o3",
+            "messages": [],
+            "max_completion_tokens": 16384
+        });
+
+        let result = provider.sanitize_request_for_compat(payload);
+        let obj = result.as_object().unwrap();
+
+        assert!(obj.contains_key("max_completion_tokens"));
+        assert!(!obj.contains_key("max_tokens"));
+    }
+
+    #[test]
+    fn test_sanitize_no_token_params() {
+        let provider = make_provider("groq");
+        let payload = json!({
+            "model": "llama-3.3-70b-versatile",
+            "messages": []
+        });
+
+        let result = provider.sanitize_request_for_compat(payload.clone());
+        assert_eq!(result, payload);
     }
 }
