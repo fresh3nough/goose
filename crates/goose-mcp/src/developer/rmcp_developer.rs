@@ -62,7 +62,9 @@ use crate::developer::{paths::get_shell_path_dirs, shell::ShellConfig};
 
 use super::analyze::{types::AnalyzeParams, CodeAnalyzer};
 use super::editor_models::{create_editor_model, EditorModel};
-use super::shell::{configure_shell_command, expand_path, is_absolute_path, kill_process_group};
+use super::shell::{
+    configure_shell_command, expand_path, is_absolute_path, kill_process_group, split_shell_args,
+};
 use super::text_editor::{
     text_editor_insert, text_editor_replace, text_editor_undo, text_editor_view, text_editor_write,
 };
@@ -963,7 +965,7 @@ impl DeveloperServer {
             ));
         }
 
-        let cmd_parts: Vec<&str> = command.split_whitespace().collect();
+        let cmd_parts = split_shell_args(command);
 
         // Check if command arguments reference ignored files
         for arg in &cmd_parts[1..] {

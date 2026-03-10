@@ -4,6 +4,9 @@ use std::{env, ffi::OsString, process::Stdio};
 #[allow(unused_imports)] // False positive: trait is used for process_group method
 use std::os::unix::process::CommandExt;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt as _;
+
 #[derive(Debug, Clone)]
 pub struct ShellConfig {
     pub executable: String,
@@ -101,6 +104,41 @@ pub fn normalize_line_endings(text: &str) -> String {
     }
 }
 
+/// Split a shell command string into tokens, respecting double and single quotes.
+///
+/// Quoted substrings are kept as single tokens with the quotes stripped.
+/// This is intentionally simple — it only needs to be good enough for
+/// `.gooseignore` validation, not a full shell parser.
+pub fn split_shell_args(command: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+
+    for c in command.chars() {
+        match c {
+            '\'' if !in_double_quote => {
+                in_single_quote = !in_single_quote;
+            }
+            '"' if !in_single_quote => {
+                in_double_quote = !in_double_quote;
+            }
+            c if c.is_whitespace() && !in_single_quote && !in_double_quote => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            _ => {
+                current.push(c);
+            }
+        }
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    tokens
+}
+
 /// Configure a shell command with process group support for proper child process tracking.
 ///
 /// On Unix systems, creates a new process group so child processes can be killed together.
@@ -135,7 +173,18 @@ pub fn configure_shell_command(
         command_builder.env(key, value);
     }
 
-    command_builder.arg(command);
+    // On Windows, use raw_arg to pass the command string verbatim to the shell.
+    // Rust's arg() auto-escapes double quotes with backslashes (e.g. \" ),
+    // which cmd.exe and PowerShell do not understand, causing commands with
+    // quoted arguments (e.g. findstr /n "class MainForm" *.cs) to break.
+    #[cfg(windows)]
+    {
+        command_builder.raw_arg(command);
+    }
+    #[cfg(not(windows))]
+    {
+        command_builder.arg(command);
+    }
 
     // On Unix systems, create a new process group so we can kill child processes
     #[cfg(unix)]
@@ -183,5 +232,53 @@ pub async fn kill_process_group(
 
         // Return the result of tokio's kill
         child.kill().await.map_err(|e| e.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_shell_args_simple() {
+        assert_eq!(split_shell_args("ls -la /tmp"), vec!["ls", "-la", "/tmp"]);
+    }
+
+    #[test]
+    fn split_shell_args_double_quoted() {
+        assert_eq!(
+            split_shell_args(r#"findstr /n "class MainForm" *.cs"#),
+            vec!["findstr", "/n", "class MainForm", "*.cs"]
+        );
+    }
+
+    #[test]
+    fn split_shell_args_single_quoted() {
+        assert_eq!(
+            split_shell_args("grep 'hello world' file.txt"),
+            vec!["grep", "hello world", "file.txt"]
+        );
+    }
+
+    #[test]
+    fn split_shell_args_mixed_quotes() {
+        assert_eq!(
+            split_shell_args(r#"echo "it's" 'a "test"'"#),
+            vec!["echo", "it's", r#"a "test""#]
+        );
+    }
+
+    #[test]
+    fn split_shell_args_empty() {
+        assert!(split_shell_args("").is_empty());
+        assert!(split_shell_args("   ").is_empty());
+    }
+
+    #[test]
+    fn split_shell_args_extra_whitespace() {
+        assert_eq!(
+            split_shell_args("  cmd   arg1   arg2  "),
+            vec!["cmd", "arg1", "arg2"]
+        );
     }
 }
