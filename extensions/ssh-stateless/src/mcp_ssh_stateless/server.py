@@ -90,9 +90,13 @@ def ssh_exec(
         # stdout first while stderr fills up, the remote process blocks
         # and we hang until timeout.
         results: dict[str, str] = {}
+        errors: dict[str, BaseException] = {}
 
         def drain(name: str, stream: Any) -> None:
-            results[name] = _read_stream(stream).strip()
+            try:
+                results[name] = _read_stream(stream).strip()
+            except BaseException as e:
+                errors[name] = e
 
         stdout_thread = threading.Thread(target=drain, args=("stdout", stdout))
         stderr_thread = threading.Thread(target=drain, args=("stderr", stderr))
@@ -100,6 +104,11 @@ def ssh_exec(
         stderr_thread.start()
         stdout_thread.join()
         stderr_thread.join()
+
+        # Propagate any read errors from the drain threads
+        if errors:
+            err_msgs = [f"{name}: {err}" for name, err in errors.items()]
+            return f"Error: Failed to read SSH output: {'; '.join(err_msgs)}"
 
         exit_code = stdout.channel.recv_exit_status()
         output_parts = [results.get("stdout", ""), results.get("stderr", "")]

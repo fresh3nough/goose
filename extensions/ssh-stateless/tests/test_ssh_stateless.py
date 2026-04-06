@@ -17,11 +17,14 @@ class FakeChannel:
 
 
 class FakeStream:
-    def __init__(self, payload: bytes, channel: FakeChannel | None = None) -> None:
+    def __init__(self, payload: bytes, channel: FakeChannel | None = None, raise_on_read: BaseException | None = None) -> None:
         self.payload = payload
         self.channel = channel or FakeChannel(0)
+        self.raise_on_read = raise_on_read
 
     def read(self) -> bytes:
+        if self.raise_on_read:
+            raise self.raise_on_read
         return self.payload
 
 
@@ -30,6 +33,8 @@ class FakeSSHClient:
     stdout_payload = b""
     stderr_payload = b""
     exit_status = 0
+    stdout_read_error: BaseException | None = None
+    stderr_read_error: BaseException | None = None
 
     def __init__(self) -> None:
         self.connect_calls: list[dict[str, object]] = []
@@ -51,7 +56,9 @@ class FakeSSHClient:
     def exec_command(self, command: str) -> tuple[None, FakeStream, FakeStream]:
         self.exec_calls.append(command)
         channel = FakeChannel(FakeSSHClient.exit_status)
-        return None, FakeStream(self.stdout_payload, channel), FakeStream(self.stderr_payload, channel)
+        stdout = FakeStream(self.stdout_payload, channel, FakeSSHClient.stdout_read_error)
+        stderr = FakeStream(self.stderr_payload, channel, FakeSSHClient.stderr_read_error)
+        return None, stdout, stderr
 
     def close(self) -> None:
         self.closed = True
@@ -63,6 +70,8 @@ class SSHStatelessTests(unittest.TestCase):
         FakeSSHClient.stdout_payload = b"command output\n"
         FakeSSHClient.stderr_payload = b""
         FakeSSHClient.exit_status = 0
+        FakeSSHClient.stdout_read_error = None
+        FakeSSHClient.stderr_read_error = None
 
     def test_password_auth_runs_command_and_closes(self) -> None:
         with patch.object(server_mod.paramiko, "SSHClient", FakeSSHClient):
@@ -212,6 +221,23 @@ class SSHStatelessTests(unittest.TestCase):
         self.assertEqual(client.connect_calls[0]["key_filename"], expected_key_path)
         self.assertEqual(client.connect_calls[0]["passphrase"], "my-passphrase")
         self.assertNotIn("password", client.connect_calls[0])
+
+    def test_stream_read_error_propagates(self) -> None:
+        FakeSSHClient.stdout_read_error = IOError("Connection reset")
+
+        with patch.object(server_mod.paramiko, "SSHClient", FakeSSHClient):
+            result = ssh_exec(
+                host="example.com",
+                username="alice",
+                command="whoami",
+                password="secret",
+                insecure=True,
+            )
+
+        self.assertIn("Error: Failed to read SSH output", result)
+        self.assertIn("stdout", result)
+        self.assertIn("Connection reset", result)
+        self.assertTrue(FakeSSHClient.instances[0].closed)
 
 
 if __name__ == "__main__":
