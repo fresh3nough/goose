@@ -53,20 +53,43 @@ def ssh_exec(
     password: str | None = None,
     key_path: str | None = None,
     port: int = 22,
+    insecure: bool = False,
 ) -> str:
-    """Run a single SSH command over a fresh connection with no persisted session state."""
+    """Run a single SSH command over a fresh connection with no persisted session state.
+
+    Args:
+        host: SSH server hostname or IP address.
+        username: Username for SSH authentication.
+        command: Command to execute on the remote host.
+        password: Password for authentication (provide password or key_path).
+        key_path: Path to private key file (provide password or key_path).
+        port: SSH port (default 22).
+        insecure: If True, accept any host key (MITM risk). If False (default),
+                  verify against system known_hosts and reject unknown keys.
+    """
     connect_kwargs = _build_connect_kwargs(host, username, password, key_path, port)
     if connect_kwargs is None:
         return "Error: Provide password or key_path"
 
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    if insecure:
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    else:
+        client.load_system_host_keys()
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
     try:
         client.connect(**connect_kwargs)
         _, stdout, stderr = client.exec_command(command)
-        parts = [_read_stream(stdout).strip(), _read_stream(stderr).strip()]
-        return "\n".join(part for part in parts if part).strip()
+        exit_code = stdout.channel.recv_exit_status()
+        stdout_text = _read_stream(stdout).strip()
+        stderr_text = _read_stream(stderr).strip()
+        output_parts = [part for part in [stdout_text, stderr_text] if part]
+        output = "\n".join(output_parts).strip()
+
+        if exit_code != 0:
+            return f"Error: Command exited with code {exit_code}\n{output}".strip()
+        return output
     finally:
         client.close()
 
