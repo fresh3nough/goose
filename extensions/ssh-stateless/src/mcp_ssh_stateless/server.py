@@ -31,10 +31,13 @@ def _build_connect_kwargs(
         "auth_timeout": 15,
     }
 
-    if password is not None:
-        connect_kwargs["password"] = password
-    else:
+    if key_path is not None:
         connect_kwargs["key_filename"] = str(Path(key_path).expanduser())
+        if password is not None:
+            # Password acts as passphrase for encrypted private keys
+            connect_kwargs["passphrase"] = password
+    else:
+        connect_kwargs["password"] = password
 
     return connect_kwargs
 

@@ -195,6 +195,24 @@ class SSHStatelessTests(unittest.TestCase):
         self.assertFalse(client.loaded_system_keys)
         self.assertEqual(client.policy, "auto_add_policy_instance")
 
+    def test_key_with_passphrase_uses_both(self) -> None:
+        expected_key_path = str(Path("~/.ssh/id_ed25519").expanduser())
+
+        with patch.object(server_mod.paramiko, "SSHClient", FakeSSHClient):
+            ssh_exec(
+                host="example.com",
+                username="alice",
+                command="whoami",
+                key_path="~/.ssh/id_ed25519",
+                password="my-passphrase",
+                insecure=True,
+            )
+
+        client = FakeSSHClient.instances[0]
+        self.assertEqual(client.connect_calls[0]["key_filename"], expected_key_path)
+        self.assertEqual(client.connect_calls[0]["passphrase"], "my-passphrase")
+        self.assertNotIn("password", client.connect_calls[0])
+
 
 if __name__ == "__main__":
     unittest.main()
