@@ -25,6 +25,18 @@ vi.mock('./bundled-extensions.json', () => ({
       env_keys: [],
       timeout: 300,
     },
+    {
+      id: 'ssh-stateless',
+      name: 'ssh-stateless',
+      display_name: 'Stateless SSH',
+      description: 'Run one-shot SSH commands over a fresh connection with no persisted session state.',
+      enabled: false,
+      type: 'stdio',
+      cmd: 'uvx',
+      args: ['mcp-ssh-stateless@latest'],
+      env_keys: [],
+      timeout: 300,
+    },
   ],
 }));
 
@@ -184,6 +196,24 @@ describe('syncBundledExtensions', () => {
       'developer',
       expect.anything(),
       expect.anything()
+    );
+  });
+
+  it('adds bundled stdio extensions with their command metadata', async () => {
+    const addExtensionFn = vi.fn().mockResolvedValue(undefined);
+
+    await syncBundledExtensions([], addExtensionFn);
+
+    expect(addExtensionFn).toHaveBeenCalledWith(
+      'ssh-stateless',
+      expect.objectContaining({
+        type: 'stdio',
+        bundled: true,
+        cmd: 'uvx',
+        args: ['mcp-ssh-stateless@latest'],
+        env_keys: [],
+      }),
+      false // enabled: false in mock
     );
   });
 });

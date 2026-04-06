@@ -42,5 +42,16 @@
     "enabled": false,
     "type": "builtin",
     "env_keys": []
+  },
+  {
+    "id": "ssh-stateless",
+    "name": "Stateless SSH",
+    "description": "Run one-shot SSH commands over a fresh connection with no persisted session state.",
+    "enabled": false,
+    "type": "stdio",
+    "cmd": "uvx",
+    "args": ["mcp-ssh-stateless@latest"],
+    "env_keys": [],
+    "timeout": 300
   }
 ]
