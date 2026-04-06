@@ -81,9 +81,11 @@ def ssh_exec(
     try:
         client.connect(**connect_kwargs)
         _, stdout, stderr = client.exec_command(command)
-        exit_code = stdout.channel.recv_exit_status()
+        # Drain streams BEFORE checking exit status to avoid deadlock when
+        # commands produce enough output to fill Paramiko's channel window.
         stdout_text = _read_stream(stdout).strip()
         stderr_text = _read_stream(stderr).strip()
+        exit_code = stdout.channel.recv_exit_status()
         output_parts = [part for part in [stdout_text, stderr_text] if part]
         output = "\n".join(output_parts).strip()
 

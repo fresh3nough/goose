@@ -61,7 +61,7 @@
     "enabled": false,
     "type": "stdio",
     "cmd": "uvx",
-    "args": ["mcp-ssh-stateless@latest"],
+    "args": ["mcp-ssh-stateless"],
     "env_keys": [],
     "timeout": 300,
     "bundled": true
