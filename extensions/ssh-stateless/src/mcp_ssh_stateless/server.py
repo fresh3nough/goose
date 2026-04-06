@@ -84,7 +84,10 @@ def ssh_exec(
 
     try:
         client.connect(**connect_kwargs)
-        _, stdout, stderr = client.exec_command(command)
+        stdin, stdout, stderr = client.exec_command(command)
+        # Close stdin immediately so commands that read from stdin (e.g. cat)
+        # receive EOF and don't block indefinitely waiting for input.
+        stdin.close()
 
         # Drain both streams CONCURRENTLY to avoid deadlock: if we read
         # stdout first while stderr fills up, the remote process blocks

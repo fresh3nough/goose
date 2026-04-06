@@ -16,6 +16,14 @@ class FakeChannel:
         return self._exit_status
 
 
+class FakeStdin:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
 class FakeStream:
     def __init__(self, payload: bytes, channel: FakeChannel | None = None, raise_on_read: BaseException | None = None) -> None:
         self.payload = payload
@@ -42,6 +50,7 @@ class FakeSSHClient:
         self.closed = False
         self.policy = None
         self.loaded_system_keys = False
+        self.last_stdin: FakeStdin | None = None
         FakeSSHClient.instances.append(self)
 
     def load_system_host_keys(self) -> None:
@@ -53,12 +62,14 @@ class FakeSSHClient:
     def connect(self, **kwargs: object) -> None:
         self.connect_calls.append(kwargs)
 
-    def exec_command(self, command: str) -> tuple[None, FakeStream, FakeStream]:
+    def exec_command(self, command: str) -> tuple[FakeStdin, FakeStream, FakeStream]:
         self.exec_calls.append(command)
         channel = FakeChannel(FakeSSHClient.exit_status)
+        stdin = FakeStdin()
+        self.last_stdin = stdin
         stdout = FakeStream(self.stdout_payload, channel, FakeSSHClient.stdout_read_error)
         stderr = FakeStream(self.stderr_payload, channel, FakeSSHClient.stderr_read_error)
-        return None, stdout, stderr
+        return stdin, stdout, stderr
 
     def close(self) -> None:
         self.closed = True
@@ -238,6 +249,20 @@ class SSHStatelessTests(unittest.TestCase):
         self.assertIn("stdout", result)
         self.assertIn("Connection reset", result)
         self.assertTrue(FakeSSHClient.instances[0].closed)
+
+    def test_stdin_is_closed_after_exec(self) -> None:
+        with patch.object(server_mod.paramiko, "SSHClient", FakeSSHClient):
+            ssh_exec(
+                host="example.com",
+                username="alice",
+                command="cat",
+                password="secret",
+                insecure=True,
+            )
+
+        client = FakeSSHClient.instances[0]
+        self.assertIsNotNone(client.last_stdin)
+        self.assertTrue(client.last_stdin.closed)
 
 
 if __name__ == "__main__":
