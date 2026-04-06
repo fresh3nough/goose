@@ -5,7 +5,7 @@ A stateless SSH MCP server for [goose](https://github.com/block/goose). Runs one
 ## Install
 
 ```bash
-uvx mcp-ssh-stateless@latest
+uvx mcp-ssh-stateless
 ```
 
 Or add to your goose config:
@@ -14,7 +14,7 @@ Or add to your goose config:
 {
   "type": "stdio",
   "cmd": "uvx",
-  "args": ["mcp-ssh-stateless@latest"]
+  "args": ["mcp-ssh-stateless"]
 }
 ```
 
@@ -32,6 +32,7 @@ Run a single SSH command. Each invocation opens a new connection and tears it do
 - `password` (str, optional) — password auth
 - `key_path` (str, optional) — path to private key (supports `~` expansion)
 - `port` (int, default 22) — SSH port
+- `insecure` (bool, default false) — if true, accept any host key (MITM risk); if false, verify against system known\_hosts and reject unknown keys
 
 Either `password` or `key_path` must be provided.
 

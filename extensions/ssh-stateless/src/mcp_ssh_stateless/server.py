@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -81,13 +82,25 @@ def ssh_exec(
     try:
         client.connect(**connect_kwargs)
         _, stdout, stderr = client.exec_command(command)
-        # Drain streams BEFORE checking exit status to avoid deadlock when
-        # commands produce enough output to fill Paramiko's channel window.
-        stdout_text = _read_stream(stdout).strip()
-        stderr_text = _read_stream(stderr).strip()
+
+        # Drain both streams CONCURRENTLY to avoid deadlock: if we read
+        # stdout first while stderr fills up, the remote process blocks
+        # and we hang until timeout.
+        results: dict[str, str] = {}
+
+        def drain(name: str, stream: Any) -> None:
+            results[name] = _read_stream(stream).strip()
+
+        stdout_thread = threading.Thread(target=drain, args=("stdout", stdout))
+        stderr_thread = threading.Thread(target=drain, args=("stderr", stderr))
+        stdout_thread.start()
+        stderr_thread.start()
+        stdout_thread.join()
+        stderr_thread.join()
+
         exit_code = stdout.channel.recv_exit_status()
-        output_parts = [part for part in [stdout_text, stderr_text] if part]
-        output = "\n".join(output_parts).strip()
+        output_parts = [results.get("stdout", ""), results.get("stderr", "")]
+        output = "\n".join(part for part in output_parts if part).strip()
 
         if exit_code != 0:
             return f"Error: Command exited with code {exit_code}\n{output}".strip()
