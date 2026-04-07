@@ -73,7 +73,7 @@ def ssh_exec(
     """
     connect_kwargs = _build_connect_kwargs(host, username, password, key_path, port)
     if connect_kwargs is None:
-        return "Error: Provide password or key_path"
+        raise ValueError("Provide password or key_path")
 
     client = paramiko.SSHClient()
     if insecure:
@@ -111,14 +111,17 @@ def ssh_exec(
         # Propagate any read errors from the drain threads
         if errors:
             err_msgs = [f"{name}: {err}" for name, err in errors.items()]
-            return f"Error: Failed to read SSH output: {'; '.join(err_msgs)}"
+            raise RuntimeError(f"Failed to read SSH output: {'; '.join(err_msgs)}")
 
         exit_code = stdout.channel.recv_exit_status()
         output_parts = [results.get("stdout", ""), results.get("stderr", "")]
         output = "\n".join(part for part in output_parts if part).strip()
 
         if exit_code != 0:
-            return f"Error: Command exited with code {exit_code}\n{output}".strip()
+            msg = f"Command exited with code {exit_code}"
+            if output:
+                msg = f"{msg}\n{output}"
+            raise RuntimeError(msg)
         return output
     finally:
         client.close()
