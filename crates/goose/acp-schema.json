@@ -1390,6 +1390,257 @@
       "x-side": "agent",
       "x-method": "_goose/dictation/model/select"
     },
+    "GetHomeDirRequest": {
+      "type": "object",
+      "description": "Resolve the current user's home directory.",
+      "x-side": "agent",
+      "x-method": "_goose/system/home_dir"
+    },
+    "GetHomeDirResponse": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Absolute path to the user's home directory."
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "x-side": "agent",
+      "x-method": "_goose/system/home_dir"
+    },
+    "PathExistsRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "description": "Check whether a path exists on disk.",
+      "x-side": "agent",
+      "x-method": "_goose/system/path_exists"
+    },
+    "PathExistsResponse": {
+      "type": "object",
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "exists"
+      ],
+      "x-side": "agent",
+      "x-method": "_goose/system/path_exists"
+    },
+    "ListDirectoryEntriesRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "description": "List the immediate children of a directory.",
+      "x-side": "agent",
+      "x-method": "_goose/system/list_directory_entries"
+    },
+    "ListDirectoryEntriesResponse": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FileTreeEntryDto"
+          }
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "x-side": "agent",
+      "x-method": "_goose/system/list_directory_entries"
+    },
+    "FileTreeEntryDto": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "description": "`\"file\"` or `\"directory\"`."
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "kind"
+      ],
+      "description": "A single filesystem entry surfaced to the desktop UI."
+    },
+    "InspectAttachmentPathsRequest": {
+      "type": "object",
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "paths"
+      ],
+      "description": "Inspect a batch of attachment paths. Missing entries are silently skipped.",
+      "x-side": "agent",
+      "x-method": "_goose/system/inspect_attachment_paths"
+    },
+    "InspectAttachmentPathsResponse": {
+      "type": "object",
+      "properties": {
+        "attachments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AttachmentPathInfoDto"
+          }
+        }
+      },
+      "required": [
+        "attachments"
+      ],
+      "x-side": "agent",
+      "x-method": "_goose/system/inspect_attachment_paths"
+    },
+    "AttachmentPathInfoDto": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "description": "`\"file\"` or `\"directory\"`."
+        },
+        "mimeType": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "kind"
+      ],
+      "description": "Metadata describing a single attachment path on disk."
+    },
+    "ListFilesForMentionsRequest": {
+      "type": "object",
+      "properties": {
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "maxResults": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "description": "Maximum number of results to return. Clamped to 1..=5000; defaults to 1500."
+        }
+      },
+      "required": [
+        "roots"
+      ],
+      "description": "Walk one or more roots and return a sorted list of file paths suitable for\n`@`-mention pickers. Honours `.gitignore`, hidden files, and symlink escapes.",
+      "x-side": "agent",
+      "x-method": "_goose/system/list_files_for_mentions"
+    },
+    "ListFilesForMentionsResponse": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "x-side": "agent",
+      "x-method": "_goose/system/list_files_for_mentions"
+    },
+    "ReadImageAttachmentRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "description": "Read an image attachment from disk and return it as a base64 payload.",
+      "x-side": "agent",
+      "x-method": "_goose/system/read_image_attachment"
+    },
+    "ReadImageAttachmentResponse": {
+      "type": "object",
+      "properties": {
+        "base64": {
+          "type": "string",
+          "description": "Base64-encoded image bytes."
+        },
+        "mimeType": {
+          "type": "string",
+          "description": "MIME type detected from the path's extension (always starts with `image/`)."
+        }
+      },
+      "required": [
+        "base64",
+        "mimeType"
+      ],
+      "x-side": "agent",
+      "x-method": "_goose/system/read_image_attachment"
+    },
+    "WriteFileRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "contents": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "contents"
+      ],
+      "description": "Write a UTF-8 string to a path on disk, creating any missing parents.\n\nThe desktop shell uses this to persist content the user has chosen via a\nnative file dialog (e.g. exported sessions). Tauri-backed file dialogs are\nstill owned by the desktop shell; only the actual write is delegated to\n`goose serve`.",
+      "x-side": "agent",
+      "x-method": "_goose/system/write_file"
+    },
     "ExtRequest": {
       "properties": {
         "id": {
@@ -1752,6 +2003,69 @@
                   ],
                   "description": "Params for _goose/dictation/model/select",
                   "title": "DictationModelSelectRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/GetHomeDirRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/system/home_dir",
+                  "title": "GetHomeDirRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/PathExistsRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/system/path_exists",
+                  "title": "PathExistsRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/ListDirectoryEntriesRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/system/list_directory_entries",
+                  "title": "ListDirectoryEntriesRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/InspectAttachmentPathsRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/system/inspect_attachment_paths",
+                  "title": "InspectAttachmentPathsRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/ListFilesForMentionsRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/system/list_files_for_mentions",
+                  "title": "ListFilesForMentionsRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/ReadImageAttachmentRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/system/read_image_attachment",
+                  "title": "ReadImageAttachmentRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/WriteFileRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/system/write_file",
+                  "title": "WriteFileRequest"
                 }
               ]
             },
@@ -1942,6 +2256,54 @@
                         }
                       ],
                       "title": "DictationModelDownloadProgressResponse"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/GetHomeDirResponse"
+                        }
+                      ],
+                      "title": "GetHomeDirResponse"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/PathExistsResponse"
+                        }
+                      ],
+                      "title": "PathExistsResponse"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/ListDirectoryEntriesResponse"
+                        }
+                      ],
+                      "title": "ListDirectoryEntriesResponse"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/InspectAttachmentPathsResponse"
+                        }
+                      ],
+                      "title": "InspectAttachmentPathsResponse"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/ListFilesForMentionsResponse"
+                        }
+                      ],
+                      "title": "ListFilesForMentionsResponse"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/ReadImageAttachmentResponse"
+                        }
+                      ],
+                      "title": "ReadImageAttachmentResponse"
                     }
                   ]
                 },

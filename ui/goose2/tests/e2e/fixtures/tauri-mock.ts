@@ -359,12 +359,6 @@ export function buildInitScript(options?: {
               return Promise.resolve("/tmp/avatars");
             case "save_persona_avatar_bytes":
               return Promise.resolve("avatar.png");
-            case "list_files_for_mentions":
-              return Promise.resolve([]);
-            case "get_home_dir":
-              return Promise.resolve("/tmp/home");
-            case "path_exists":
-              return Promise.resolve(false);
             case "resolve_path": {
               const parts = args?.request?.parts ?? [];
               const path = parts

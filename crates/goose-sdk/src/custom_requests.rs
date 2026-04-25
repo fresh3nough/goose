@@ -647,6 +647,144 @@ pub struct ProviderInventoryEntryDto {
 #[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcResponse)]
 pub struct EmptyResponse {}
 
+/// Resolve the current user's home directory.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/system/home_dir", response = GetHomeDirResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GetHomeDirRequest {}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GetHomeDirResponse {
+    /// Absolute path to the user's home directory.
+    pub path: String,
+}
+
+/// Check whether a path exists on disk.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/system/path_exists", response = PathExistsResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct PathExistsRequest {
+    pub path: String,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct PathExistsResponse {
+    pub exists: bool,
+}
+
+/// A single filesystem entry surfaced to the desktop UI.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileTreeEntryDto {
+    pub name: String,
+    pub path: String,
+    /// `"file"` or `"directory"`.
+    pub kind: String,
+}
+
+/// List the immediate children of a directory.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(
+    method = "_goose/system/list_directory_entries",
+    response = ListDirectoryEntriesResponse
+)]
+#[serde(rename_all = "camelCase")]
+pub struct ListDirectoryEntriesRequest {
+    pub path: String,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct ListDirectoryEntriesResponse {
+    pub entries: Vec<FileTreeEntryDto>,
+}
+
+/// Metadata describing a single attachment path on disk.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentPathInfoDto {
+    pub name: String,
+    pub path: String,
+    /// `"file"` or `"directory"`.
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+}
+
+/// Inspect a batch of attachment paths. Missing entries are silently skipped.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(
+    method = "_goose/system/inspect_attachment_paths",
+    response = InspectAttachmentPathsResponse
+)]
+#[serde(rename_all = "camelCase")]
+pub struct InspectAttachmentPathsRequest {
+    pub paths: Vec<String>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct InspectAttachmentPathsResponse {
+    pub attachments: Vec<AttachmentPathInfoDto>,
+}
+
+/// Walk one or more roots and return a sorted list of file paths suitable for
+/// `@`-mention pickers. Honours `.gitignore`, hidden files, and symlink escapes.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(
+    method = "_goose/system/list_files_for_mentions",
+    response = ListFilesForMentionsResponse
+)]
+#[serde(rename_all = "camelCase")]
+pub struct ListFilesForMentionsRequest {
+    pub roots: Vec<String>,
+    /// Maximum number of results to return. Clamped to 1..=5000; defaults to 1500.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_results: Option<u32>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct ListFilesForMentionsResponse {
+    pub files: Vec<String>,
+}
+
+/// Read an image attachment from disk and return it as a base64 payload.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(
+    method = "_goose/system/read_image_attachment",
+    response = ReadImageAttachmentResponse
+)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadImageAttachmentRequest {
+    pub path: String,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadImageAttachmentResponse {
+    /// Base64-encoded image bytes.
+    pub base64: String,
+    /// MIME type detected from the path's extension (always starts with `image/`).
+    pub mime_type: String,
+}
+
+/// Write a UTF-8 string to a path on disk, creating any missing parents.
+///
+/// The desktop shell uses this to persist content the user has chosen via a
+/// native file dialog (e.g. exported sessions). Tauri-backed file dialogs are
+/// still owned by the desktop shell; only the actual write is delegated to
+/// `goose serve`.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/system/write_file", response = EmptyResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct WriteFileRequest {
+    pub path: String,
+    pub contents: String,
+}
+
 /// List available local Whisper models with their download status.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
 #[request(

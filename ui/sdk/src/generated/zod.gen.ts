@@ -610,6 +610,111 @@ export const zDictationModelSelectRequest = z.object({
     modelId: z.string()
 });
 
+/**
+ * Resolve the current user's home directory.
+ */
+export const zGetHomeDirRequest = z.record(z.unknown());
+
+export const zGetHomeDirResponse = z.object({
+    path: z.string()
+});
+
+/**
+ * Check whether a path exists on disk.
+ */
+export const zPathExistsRequest = z.object({
+    path: z.string()
+});
+
+export const zPathExistsResponse = z.object({
+    exists: z.boolean()
+});
+
+/**
+ * List the immediate children of a directory.
+ */
+export const zListDirectoryEntriesRequest = z.object({
+    path: z.string()
+});
+
+/**
+ * A single filesystem entry surfaced to the desktop UI.
+ */
+export const zFileTreeEntryDto = z.object({
+    name: z.string(),
+    path: z.string(),
+    kind: z.string()
+});
+
+export const zListDirectoryEntriesResponse = z.object({
+    entries: z.array(zFileTreeEntryDto)
+});
+
+/**
+ * Inspect a batch of attachment paths. Missing entries are silently skipped.
+ */
+export const zInspectAttachmentPathsRequest = z.object({
+    paths: z.array(z.string())
+});
+
+/**
+ * Metadata describing a single attachment path on disk.
+ */
+export const zAttachmentPathInfoDto = z.object({
+    name: z.string(),
+    path: z.string(),
+    kind: z.string(),
+    mimeType: z.union([
+        z.string(),
+        z.null()
+    ]).optional()
+});
+
+export const zInspectAttachmentPathsResponse = z.object({
+    attachments: z.array(zAttachmentPathInfoDto)
+});
+
+/**
+ * Walk one or more roots and return a sorted list of file paths suitable for
+ * `@`-mention pickers. Honours `.gitignore`, hidden files, and symlink escapes.
+ */
+export const zListFilesForMentionsRequest = z.object({
+    roots: z.array(z.string()),
+    maxResults: z.union([
+        z.number().int().gte(0).max(4294967295, { message: 'Invalid value: Expected uint32 to be <= 4294967295' }),
+        z.null()
+    ]).optional()
+});
+
+export const zListFilesForMentionsResponse = z.object({
+    files: z.array(z.string())
+});
+
+/**
+ * Read an image attachment from disk and return it as a base64 payload.
+ */
+export const zReadImageAttachmentRequest = z.object({
+    path: z.string()
+});
+
+export const zReadImageAttachmentResponse = z.object({
+    base64: z.string(),
+    mimeType: z.string()
+});
+
+/**
+ * Write a UTF-8 string to a path on disk, creating any missing parents.
+ *
+ * The desktop shell uses this to persist content the user has chosen via a
+ * native file dialog (e.g. exported sessions). Tauri-backed file dialogs are
+ * still owned by the desktop shell; only the actual write is delegated to
+ * `goose serve`.
+ */
+export const zWriteFileRequest = z.object({
+    path: z.string(),
+    contents: z.string()
+});
+
 export const zExtRequest = z.object({
     id: z.string(),
     method: z.string(),
@@ -653,7 +758,14 @@ export const zExtRequest = z.object({
             zDictationModelDownloadProgressRequest,
             zDictationModelCancelRequest,
             zDictationModelDeleteRequest,
-            zDictationModelSelectRequest
+            zDictationModelSelectRequest,
+            zGetHomeDirRequest,
+            zPathExistsRequest,
+            zListDirectoryEntriesRequest,
+            zInspectAttachmentPathsRequest,
+            zListFilesForMentionsRequest,
+            zReadImageAttachmentRequest,
+            zWriteFileRequest
         ]),
         z.union([
             z.record(z.unknown()),
@@ -686,7 +798,13 @@ export const zExtResponse = z.union([
                 zDictationTranscribeResponse,
                 zDictationConfigResponse,
                 zDictationModelsListResponse,
-                zDictationModelDownloadProgressResponse
+                zDictationModelDownloadProgressResponse,
+                zGetHomeDirResponse,
+                zPathExistsResponse,
+                zListDirectoryEntriesResponse,
+                zInspectAttachmentPathsResponse,
+                zListFilesForMentionsResponse,
+                zReadImageAttachmentResponse
             ]),
             z.unknown()
         ]).optional()

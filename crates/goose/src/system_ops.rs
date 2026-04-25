@@ -1,18 +1,26 @@
-use base64::Engine;
-use serde::Serialize;
-use tauri::Window;
-use tauri_plugin_dialog::DialogExt;
+//! Filesystem and attachment helpers used by the ACP `_goose/system/*` methods.
+//!
+//! These helpers were originally implemented as Tauri commands in
+//! `ui/goose2/src-tauri/src/commands/system.rs`. They were migrated here as
+//! part of [#8692](https://github.com/aaif-goose/goose/issues/8692) so the
+//! `goose serve` process owns the filesystem logic and the desktop shell can
+//! stay a thin layer.
 
 use std::collections::HashSet;
-use std::fs;
 use std::path::{Path, PathBuf};
+
+use base64::Engine;
+use fs_err as fs;
+use serde::{Deserialize, Serialize};
 
 const DEFAULT_FILE_MENTION_LIMIT: usize = 1500;
 const MAX_FILE_MENTION_LIMIT: usize = 5000;
 const MAX_SCAN_DEPTH: usize = 8;
 const MAX_IMAGE_ATTACHMENT_BYTES: u64 = 20 * 1024 * 1024;
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+/// A single filesystem entry (file or directory) returned by
+/// [`list_directory_entries`].
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct FileTreeEntry {
     pub name: String,
@@ -20,7 +28,9 @@ pub struct FileTreeEntry {
     pub kind: String,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+/// Metadata for a single attachment path, returned by
+/// [`inspect_attachment_paths`].
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AttachmentPathInfo {
     pub name: String,
@@ -30,58 +40,42 @@ pub struct AttachmentPathInfo {
     pub mime_type: Option<String>,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+/// Decoded image attachment payload.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageAttachmentPayload {
     pub base64: String,
     pub mime_type: String,
 }
 
-#[tauri::command]
+/// Resolve the current user's home directory.
 pub fn get_home_dir() -> Result<String, String> {
     let home_dir = dirs::home_dir().ok_or("Could not determine home directory")?;
     Ok(home_dir.to_string_lossy().into_owned())
 }
 
-#[tauri::command]
-pub async fn save_exported_session_file(
-    window: Window,
-    default_filename: String,
-    contents: String,
-) -> Result<Option<String>, String> {
-    let desktop =
-        dirs::desktop_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join("Desktop"));
-
-    let mut dialog = window
-        .dialog()
-        .file()
-        .set_title("Export Session")
-        .set_file_name(default_filename)
-        .set_directory(desktop)
-        .add_filter("JSON", &["json"]);
-
-    #[cfg(desktop)]
-    {
-        dialog = dialog.set_parent(&window);
-    }
-
-    let Some(path) = dialog.blocking_save_file() else {
-        return Ok(None);
-    };
-
-    let path = path
-        .into_path()
-        .map_err(|_| "Selected save path is not available".to_string())?;
-    std::fs::write(&path, contents)
-        .map_err(|e| format!("Failed to write file '{}': {}", path.display(), e))?;
-
-    Ok(Some(path.to_string_lossy().into_owned()))
+/// Returns true if `path` exists on disk.
+pub fn path_exists(path: &str) -> bool {
+    Path::new(path).exists()
 }
 
-#[tauri::command]
-#[allow(dead_code)]
-pub fn path_exists(path: String) -> bool {
-    std::path::Path::new(&path).exists()
+/// Write `contents` to `path`, creating any missing parent directories.
+pub fn write_file(path: &str, contents: &str) -> Result<(), String> {
+    let path = Path::new(path);
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create '{}': {}", parent.display(), e))?;
+        }
+    }
+    fs::write(path, contents)
+        .map_err(|e| format!("Failed to write file '{}': {}", path.display(), e))
+}
+
+/// List the immediate children of `path`, sorted directories-first then by
+/// case-insensitive name. Skips `.git/` to match the desktop shell behaviour.
+pub fn list_directory_entries(path: &str) -> Result<Vec<FileTreeEntry>, String> {
+    read_directory_entries(Path::new(path))
 }
 
 fn read_directory_entries(path: &Path) -> Result<Vec<FileTreeEntry>, String> {
@@ -100,9 +94,7 @@ fn read_directory_entries(path: &Path) -> Result<Vec<FileTreeEntry>, String> {
         .map_err(|error| format!("Failed to read directory '{}': {}", path.display(), error))?;
 
     for entry in reader {
-        let Ok(entry) = entry else {
-            continue;
-        };
+        let Ok(entry) = entry else { continue };
         let name = entry.file_name().to_string_lossy().into_owned();
         if name == ".git" {
             continue;
@@ -110,7 +102,6 @@ fn read_directory_entries(path: &Path) -> Result<Vec<FileTreeEntry>, String> {
         let Some(file_tree_entry) = build_file_tree_entry(entry.path(), name) else {
             continue;
         };
-
         entries.push(file_tree_entry);
     }
 
@@ -139,11 +130,6 @@ fn build_file_tree_entry(path: PathBuf, name: String) -> Option<FileTreeEntry> {
             "file".to_string()
         },
     })
-}
-
-#[tauri::command]
-pub fn list_directory_entries(path: String) -> Result<Vec<FileTreeEntry>, String> {
-    read_directory_entries(Path::new(&path))
 }
 
 fn inspect_attachment_path(path: &Path) -> Result<AttachmentPathInfo, String> {
@@ -215,8 +201,10 @@ fn normalize_attachment_paths(paths: Vec<String>) -> Vec<PathBuf> {
     normalized
 }
 
-#[tauri::command]
-pub fn inspect_attachment_paths(paths: Vec<String>) -> Result<Vec<AttachmentPathInfo>, String> {
+/// Look up metadata for each path in `paths`. Missing entries are silently
+/// skipped so callers can pass in a heterogeneous batch (e.g. drag-and-drop
+/// payloads that include now-deleted paths).
+pub fn inspect_attachment_paths(paths: Vec<String>) -> Vec<AttachmentPathInfo> {
     let mut attachments = Vec::new();
 
     for path in normalize_attachment_paths(paths) {
@@ -225,12 +213,12 @@ pub fn inspect_attachment_paths(paths: Vec<String>) -> Result<Vec<AttachmentPath
         }
     }
 
-    Ok(attachments)
+    attachments
 }
 
-#[tauri::command]
-pub fn read_image_attachment(path: String) -> Result<ImageAttachmentPayload, String> {
-    let attachment = inspect_attachment_path(Path::new(&path))?;
+/// Read an image file from disk and return it as a base64-encoded payload.
+pub fn read_image_attachment(path: &str) -> Result<ImageAttachmentPayload, String> {
+    let attachment = inspect_attachment_path(Path::new(path))?;
     let mime_type = attachment
         .mime_type
         .ok_or_else(|| format!("Unable to determine image type for '{}'", attachment.path))?;
@@ -275,7 +263,9 @@ fn normalize_roots(roots: Vec<String>) -> Vec<PathBuf> {
     normalized
 }
 
-fn scan_files_for_mentions(roots: Vec<String>, max_results: Option<usize>) -> Vec<String> {
+/// Walk `roots` and return up to `max_results` file paths, respecting hidden /
+/// gitignore rules so we don't surface things like `node_modules` or `.git`.
+pub fn list_files_for_mentions(roots: Vec<String>, max_results: Option<usize>) -> Vec<String> {
     let roots = normalize_roots(roots);
     if roots.is_empty() {
         return Vec::new();
@@ -291,13 +281,13 @@ fn scan_files_for_mentions(roots: Vec<String>, max_results: Option<usize>) -> Ve
     }
     builder
         .max_depth(Some(MAX_SCAN_DEPTH))
-        .follow_links(false) // don't traverse symlinks
-        .hidden(true) // skip hidden files/dirs
-        .git_ignore(true) // respect .gitignore
-        .git_global(true) // respect global gitignore
-        .git_exclude(true); // respect .git/info/exclude
+        .follow_links(false)
+        .hidden(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true);
 
-    // Canonicalize roots so we can reject paths that escape via symlink targets
+    // Canonicalize roots so we can reject paths that escape via symlink targets.
     let canonical_roots: Vec<PathBuf> = roots
         .iter()
         .filter_map(|root| root.canonicalize().ok())
@@ -316,7 +306,6 @@ fn scan_files_for_mentions(roots: Vec<String>, max_results: Option<usize>) -> Ve
         if !ft.is_file() {
             continue;
         }
-        // Reject any path that resolved outside the project roots
         let canonical = match entry.path().canonicalize() {
             Ok(c) => c,
             Err(_) => continue,
@@ -338,28 +327,13 @@ fn scan_files_for_mentions(roots: Vec<String>, max_results: Option<usize>) -> Ve
     files
 }
 
-#[tauri::command]
-pub async fn list_files_for_mentions(
-    roots: Vec<String>,
-    max_results: Option<usize>,
-) -> Result<Vec<String>, String> {
-    tokio::task::spawn_blocking(move || scan_files_for_mentions(roots, max_results))
-        .await
-        .map_err(|error| format!("Failed to scan files for mentions: {}", error))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        build_file_tree_entry, inspect_attachment_path, inspect_attachment_paths,
-        normalize_attachment_paths, normalize_roots, read_directory_entries, read_image_attachment,
-        scan_files_for_mentions, MAX_IMAGE_ATTACHMENT_BYTES,
-    };
+    use super::*;
     use base64::Engine;
     use std::fs;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
-    use std::path::PathBuf;
     use std::process::Command;
     use tempfile::tempdir;
 
@@ -387,7 +361,7 @@ mod tests {
         fs::write(ignored.join("index.js"), "module.exports = {}").expect("ignored file");
         fs::write(root.join(".gitignore"), "node_modules/\n").expect(".gitignore");
 
-        let files = scan_files_for_mentions(vec![root.to_string_lossy().to_string()], Some(50));
+        let files = list_files_for_mentions(vec![root.to_string_lossy().to_string()], Some(50));
 
         let joined = files.join("\n");
         assert!(joined.contains("main.ts"), "should include source files");
@@ -405,7 +379,7 @@ mod tests {
         fs::write(root.join("visible.ts"), "").expect("visible file");
         fs::write(root.join(".hidden"), "").expect("hidden file");
 
-        let files = scan_files_for_mentions(vec![root.to_string_lossy().to_string()], Some(50));
+        let files = list_files_for_mentions(vec![root.to_string_lossy().to_string()], Some(50));
 
         let joined = files.join("\n");
         assert!(joined.contains("visible.ts"));
@@ -431,37 +405,37 @@ mod tests {
         assert_eq!(
             entries,
             vec![
-                super::FileTreeEntry {
+                FileTreeEntry {
                     name: ".github".into(),
                     path: root.join(".github").to_string_lossy().into_owned(),
                     kind: "directory".into(),
                 },
-                super::FileTreeEntry {
+                FileTreeEntry {
                     name: "node_modules".into(),
                     path: root.join("node_modules").to_string_lossy().into_owned(),
                     kind: "directory".into(),
                 },
-                super::FileTreeEntry {
+                FileTreeEntry {
                     name: "src".into(),
                     path: root.join("src").to_string_lossy().into_owned(),
                     kind: "directory".into(),
                 },
-                super::FileTreeEntry {
+                FileTreeEntry {
                     name: ".env".into(),
                     path: root.join(".env").to_string_lossy().into_owned(),
                     kind: "file".into(),
                 },
-                super::FileTreeEntry {
+                FileTreeEntry {
                     name: ".gitignore".into(),
                     path: root.join(".gitignore").to_string_lossy().into_owned(),
                     kind: "file".into(),
                 },
-                super::FileTreeEntry {
+                FileTreeEntry {
                     name: "alpha.ts".into(),
                     path: root.join("alpha.ts").to_string_lossy().into_owned(),
                     kind: "file".into(),
                 },
-                super::FileTreeEntry {
+                FileTreeEntry {
                     name: "README.md".into(),
                     path: root.join("README.md").to_string_lossy().into_owned(),
                     kind: "file".into(),
@@ -542,7 +516,7 @@ mod tests {
 
         fs::write(&image, png_bytes).expect("png file");
 
-        let payload = read_image_attachment(image.to_string_lossy().into_owned()).expect("payload");
+        let payload = read_image_attachment(&image.to_string_lossy()).expect("payload");
 
         assert_eq!(payload.mime_type, "image/png");
         assert!(!payload.base64.is_empty());
@@ -579,8 +553,7 @@ mod tests {
         let attachments = inspect_attachment_paths(vec![
             valid.to_string_lossy().into_owned(),
             missing.to_string_lossy().into_owned(),
-        ])
-        .expect("attachments");
+        ]);
 
         assert_eq!(attachments.len(), 1);
         assert_eq!(attachments[0].name, "report.txt");
@@ -618,9 +591,31 @@ mod tests {
         )
         .expect("oversized image file");
 
-        let error =
-            read_image_attachment(image.to_string_lossy().into_owned()).expect_err("size limit");
+        let error = read_image_attachment(&image.to_string_lossy()).expect_err("size limit");
 
         assert!(error.contains("exceeds the 20 MB limit"));
+    }
+
+    #[test]
+    fn write_file_creates_missing_parent_directories() {
+        let dir = tempdir().expect("tempdir");
+        let nested = dir.path().join("a/b/c/out.json");
+
+        write_file(&nested.to_string_lossy(), "{\"ok\":true}").expect("write");
+
+        let read_back = std::fs::read_to_string(&nested).expect("read back");
+        assert_eq!(read_back, "{\"ok\":true}");
+    }
+
+    #[test]
+    fn path_exists_reflects_disk_state() {
+        let dir = tempdir().expect("tempdir");
+        let file = dir.path().join("hello.txt");
+        std::fs::write(&file, "hi").expect("file");
+
+        assert!(path_exists(&file.to_string_lossy()));
+        assert!(!path_exists(
+            &dir.path().join("missing.txt").to_string_lossy()
+        ));
     }
 }

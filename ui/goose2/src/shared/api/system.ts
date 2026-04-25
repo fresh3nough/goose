@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { getClient } from "@/shared/api/acpConnection";
 
 export interface FileTreeEntry {
   name: string;
@@ -19,41 +19,70 @@ export interface ImageAttachmentPayload {
 }
 
 export async function getHomeDir(): Promise<string> {
-  return invoke("get_home_dir");
-}
-
-export async function saveExportedSessionFile(
-  defaultFilename: string,
-  contents: string,
-): Promise<string | null> {
-  return invoke("save_exported_session_file", { defaultFilename, contents });
+  const client = await getClient();
+  const response = await client.goose.GooseSystemHomeDir({});
+  return response.path;
 }
 
 export async function pathExists(path: string): Promise<boolean> {
-  return invoke("path_exists", { path });
+  const client = await getClient();
+  const response = await client.goose.GooseSystemPathExists({ path });
+  return response.exists;
+}
+
+export async function listDirectoryEntries(
+  path: string,
+): Promise<FileTreeEntry[]> {
+  const client = await getClient();
+  const response = await client.goose.GooseSystemListDirectoryEntries({ path });
+  return response.entries.map((entry) => ({
+    name: entry.name,
+    path: entry.path,
+    kind: entry.kind === "directory" ? "directory" : "file",
+  }));
+}
+
+export async function inspectAttachmentPaths(
+  paths: string[],
+): Promise<AttachmentPathInfo[]> {
+  const client = await getClient();
+  const response = await client.goose.GooseSystemInspectAttachmentPaths({
+    paths,
+  });
+  return response.attachments.map((attachment) => ({
+    name: attachment.name,
+    path: attachment.path,
+    kind: attachment.kind === "directory" ? "directory" : "file",
+    ...(attachment.mimeType ? { mimeType: attachment.mimeType } : {}),
+  }));
 }
 
 export async function listFilesForMentions(
   roots: string[],
   maxResults = 1500,
 ): Promise<string[]> {
-  return invoke("list_files_for_mentions", { roots, maxResults });
-}
-
-export async function listDirectoryEntries(
-  path: string,
-): Promise<FileTreeEntry[]> {
-  return invoke("list_directory_entries", { path });
-}
-
-export async function inspectAttachmentPaths(
-  paths: string[],
-): Promise<AttachmentPathInfo[]> {
-  return invoke("inspect_attachment_paths", { paths });
+  const client = await getClient();
+  const response = await client.goose.GooseSystemListFilesForMentions({
+    roots,
+    maxResults,
+  });
+  return response.files;
 }
 
 export async function readImageAttachment(
   path: string,
 ): Promise<ImageAttachmentPayload> {
-  return invoke("read_image_attachment", { path });
+  const client = await getClient();
+  const response = await client.goose.GooseSystemReadImageAttachment({ path });
+  return { base64: response.base64, mimeType: response.mimeType };
+}
+
+/**
+ * Write a UTF-8 string to a path on disk, creating any missing parent
+ * directories. The desktop shell uses this to persist content the user has
+ * chosen via a native file dialog (e.g. exported session JSON).
+ */
+export async function writeFile(path: string, contents: string): Promise<void> {
+  const client = await getClient();
+  await client.goose.GooseSystemWriteFile({ path, contents });
 }

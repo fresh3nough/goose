@@ -76,13 +76,6 @@ pub fn run() {
             commands::agent_setup::install_agent,
             commands::agent_setup::authenticate_agent,
             commands::path_resolver::resolve_path,
-            commands::system::get_home_dir,
-            commands::system::save_exported_session_file,
-            commands::system::path_exists,
-            commands::system::list_directory_entries,
-            commands::system::inspect_attachment_paths,
-            commands::system::list_files_for_mentions,
-            commands::system::read_image_attachment,
         ])
         .setup(|_app| Ok(()))
         .build(tauri::generate_context!())

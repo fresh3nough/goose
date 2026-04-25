@@ -664,17 +664,136 @@ export type DictationModelSelectRequest = {
     modelId: string;
 };
 
+/**
+ * Resolve the current user's home directory.
+ */
+export type GetHomeDirRequest = {
+    [key: string]: unknown;
+};
+
+export type GetHomeDirResponse = {
+    /**
+     * Absolute path to the user's home directory.
+     */
+    path: string;
+};
+
+/**
+ * Check whether a path exists on disk.
+ */
+export type PathExistsRequest = {
+    path: string;
+};
+
+export type PathExistsResponse = {
+    exists: boolean;
+};
+
+/**
+ * List the immediate children of a directory.
+ */
+export type ListDirectoryEntriesRequest = {
+    path: string;
+};
+
+export type ListDirectoryEntriesResponse = {
+    entries: Array<FileTreeEntryDto>;
+};
+
+/**
+ * A single filesystem entry surfaced to the desktop UI.
+ */
+export type FileTreeEntryDto = {
+    name: string;
+    path: string;
+    /**
+     * `"file"` or `"directory"`.
+     */
+    kind: string;
+};
+
+/**
+ * Inspect a batch of attachment paths. Missing entries are silently skipped.
+ */
+export type InspectAttachmentPathsRequest = {
+    paths: Array<string>;
+};
+
+export type InspectAttachmentPathsResponse = {
+    attachments: Array<AttachmentPathInfoDto>;
+};
+
+/**
+ * Metadata describing a single attachment path on disk.
+ */
+export type AttachmentPathInfoDto = {
+    name: string;
+    path: string;
+    /**
+     * `"file"` or `"directory"`.
+     */
+    kind: string;
+    mimeType?: string | null;
+};
+
+/**
+ * Walk one or more roots and return a sorted list of file paths suitable for
+ * `@`-mention pickers. Honours `.gitignore`, hidden files, and symlink escapes.
+ */
+export type ListFilesForMentionsRequest = {
+    roots: Array<string>;
+    /**
+     * Maximum number of results to return. Clamped to 1..=5000; defaults to 1500.
+     */
+    maxResults?: number | null;
+};
+
+export type ListFilesForMentionsResponse = {
+    files: Array<string>;
+};
+
+/**
+ * Read an image attachment from disk and return it as a base64 payload.
+ */
+export type ReadImageAttachmentRequest = {
+    path: string;
+};
+
+export type ReadImageAttachmentResponse = {
+    /**
+     * Base64-encoded image bytes.
+     */
+    base64: string;
+    /**
+     * MIME type detected from the path's extension (always starts with `image/`).
+     */
+    mimeType: string;
+};
+
+/**
+ * Write a UTF-8 string to a path on disk, creating any missing parents.
+ *
+ * The desktop shell uses this to persist content the user has chosen via a
+ * native file dialog (e.g. exported sessions). Tauri-backed file dialogs are
+ * still owned by the desktop shell; only the actual write is delegated to
+ * `goose serve`.
+ */
+export type WriteFileRequest = {
+    path: string;
+    contents: string;
+};
+
 export type ExtRequest = {
     id: string;
     method: string;
-    params?: AddExtensionRequest | RemoveExtensionRequest | GetToolsRequest | ReadResourceRequest | UpdateWorkingDirRequest | DeleteSessionRequest | GetExtensionsRequest | AddConfigExtensionRequest | RemoveConfigExtensionRequest | ToggleConfigExtensionRequest | GetSessionExtensionsRequest | ListProvidersRequest | RefreshProviderInventoryRequest | ReadConfigRequest | UpsertConfigRequest | RemoveConfigRequest | CheckSecretRequest | UpsertSecretRequest | RemoveSecretRequest | ExportSessionRequest | ImportSessionRequest | UpdateSessionProjectRequest | RenameSessionRequest | ArchiveSessionRequest | UnarchiveSessionRequest | CreateSourceRequest | ListSourcesRequest | UpdateSourceRequest | DeleteSourceRequest | ExportSourceRequest | ImportSourcesRequest | DictationTranscribeRequest | DictationConfigRequest | DictationModelsListRequest | DictationModelDownloadRequest | DictationModelDownloadProgressRequest | DictationModelCancelRequest | DictationModelDeleteRequest | DictationModelSelectRequest | {
+    params?: AddExtensionRequest | RemoveExtensionRequest | GetToolsRequest | ReadResourceRequest | UpdateWorkingDirRequest | DeleteSessionRequest | GetExtensionsRequest | AddConfigExtensionRequest | RemoveConfigExtensionRequest | ToggleConfigExtensionRequest | GetSessionExtensionsRequest | ListProvidersRequest | RefreshProviderInventoryRequest | ReadConfigRequest | UpsertConfigRequest | RemoveConfigRequest | CheckSecretRequest | UpsertSecretRequest | RemoveSecretRequest | ExportSessionRequest | ImportSessionRequest | UpdateSessionProjectRequest | RenameSessionRequest | ArchiveSessionRequest | UnarchiveSessionRequest | CreateSourceRequest | ListSourcesRequest | UpdateSourceRequest | DeleteSourceRequest | ExportSourceRequest | ImportSourcesRequest | DictationTranscribeRequest | DictationConfigRequest | DictationModelsListRequest | DictationModelDownloadRequest | DictationModelDownloadProgressRequest | DictationModelCancelRequest | DictationModelDeleteRequest | DictationModelSelectRequest | GetHomeDirRequest | PathExistsRequest | ListDirectoryEntriesRequest | InspectAttachmentPathsRequest | ListFilesForMentionsRequest | ReadImageAttachmentRequest | WriteFileRequest | {
         [key: string]: unknown;
     } | null;
 };
 
 export type ExtResponse = {
     id: string;
-    result?: EmptyResponse | GetToolsResponse | ReadResourceResponse | GetExtensionsResponse | GetSessionExtensionsResponse | ListProvidersResponse | RefreshProviderInventoryResponse | ReadConfigResponse | CheckSecretResponse | ExportSessionResponse | ImportSessionResponse | CreateSourceResponse | ListSourcesResponse | UpdateSourceResponse | ExportSourceResponse | ImportSourcesResponse | DictationTranscribeResponse | DictationConfigResponse | DictationModelsListResponse | DictationModelDownloadProgressResponse | unknown;
+    result?: EmptyResponse | GetToolsResponse | ReadResourceResponse | GetExtensionsResponse | GetSessionExtensionsResponse | ListProvidersResponse | RefreshProviderInventoryResponse | ReadConfigResponse | CheckSecretResponse | ExportSessionResponse | ImportSessionResponse | CreateSourceResponse | ListSourcesResponse | UpdateSourceResponse | ExportSourceResponse | ImportSourcesResponse | DictationTranscribeResponse | DictationConfigResponse | DictationModelsListResponse | DictationModelDownloadProgressResponse | GetHomeDirResponse | PathExistsResponse | ListDirectoryEntriesResponse | InspectAttachmentPathsResponse | ListFilesForMentionsResponse | ReadImageAttachmentResponse | unknown;
 } | {
     error: {
         code: number;

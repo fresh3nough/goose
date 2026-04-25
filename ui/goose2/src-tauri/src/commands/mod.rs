@@ -8,4 +8,3 @@ pub mod git_changes;
 pub mod model_setup;
 pub mod path_resolver;
 pub mod projects;
-pub mod system;

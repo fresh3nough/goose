@@ -194,6 +194,41 @@
       "method": "_goose/dictation/model/select",
       "requestType": "DictationModelSelectRequest",
       "responseType": "EmptyResponse"
+    },
+    {
+      "method": "_goose/system/home_dir",
+      "requestType": "GetHomeDirRequest",
+      "responseType": "GetHomeDirResponse"
+    },
+    {
+      "method": "_goose/system/path_exists",
+      "requestType": "PathExistsRequest",
+      "responseType": "PathExistsResponse"
+    },
+    {
+      "method": "_goose/system/list_directory_entries",
+      "requestType": "ListDirectoryEntriesRequest",
+      "responseType": "ListDirectoryEntriesResponse"
+    },
+    {
+      "method": "_goose/system/inspect_attachment_paths",
+      "requestType": "InspectAttachmentPathsRequest",
+      "responseType": "InspectAttachmentPathsResponse"
+    },
+    {
+      "method": "_goose/system/list_files_for_mentions",
+      "requestType": "ListFilesForMentionsRequest",
+      "responseType": "ListFilesForMentionsResponse"
+    },
+    {
+      "method": "_goose/system/read_image_attachment",
+      "requestType": "ReadImageAttachmentRequest",
+      "responseType": "ReadImageAttachmentResponse"
+    },
+    {
+      "method": "_goose/system/write_file",
+      "requestType": "WriteFileRequest",
+      "responseType": "EmptyResponse"
     }
   ]
 }

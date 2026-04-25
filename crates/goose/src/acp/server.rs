@@ -3563,6 +3563,89 @@ impl GooseAcpAgent {
 
         Ok(EmptyResponse {})
     }
+
+    #[custom_method(GetHomeDirRequest)]
+    async fn on_get_home_dir(&self) -> Result<GetHomeDirResponse, sacp::Error> {
+        let path = crate::system_ops::get_home_dir().invalid_params_err()?;
+        Ok(GetHomeDirResponse { path })
+    }
+
+    #[custom_method(PathExistsRequest)]
+    async fn on_path_exists(
+        &self,
+        req: PathExistsRequest,
+    ) -> Result<PathExistsResponse, sacp::Error> {
+        Ok(PathExistsResponse {
+            exists: crate::system_ops::path_exists(&req.path),
+        })
+    }
+
+    #[custom_method(ListDirectoryEntriesRequest)]
+    async fn on_list_directory_entries(
+        &self,
+        req: ListDirectoryEntriesRequest,
+    ) -> Result<ListDirectoryEntriesResponse, sacp::Error> {
+        let entries = crate::system_ops::list_directory_entries(&req.path).invalid_params_err()?;
+        Ok(ListDirectoryEntriesResponse {
+            entries: entries
+                .into_iter()
+                .map(|e| FileTreeEntryDto {
+                    name: e.name,
+                    path: e.path,
+                    kind: e.kind,
+                })
+                .collect(),
+        })
+    }
+
+    #[custom_method(InspectAttachmentPathsRequest)]
+    async fn on_inspect_attachment_paths(
+        &self,
+        req: InspectAttachmentPathsRequest,
+    ) -> Result<InspectAttachmentPathsResponse, sacp::Error> {
+        let attachments = crate::system_ops::inspect_attachment_paths(req.paths)
+            .into_iter()
+            .map(|a| AttachmentPathInfoDto {
+                name: a.name,
+                path: a.path,
+                kind: a.kind,
+                mime_type: a.mime_type,
+            })
+            .collect();
+        Ok(InspectAttachmentPathsResponse { attachments })
+    }
+
+    #[custom_method(ListFilesForMentionsRequest)]
+    async fn on_list_files_for_mentions(
+        &self,
+        req: ListFilesForMentionsRequest,
+    ) -> Result<ListFilesForMentionsResponse, sacp::Error> {
+        let max_results = req.max_results.map(|n| n as usize);
+        let files = tokio::task::spawn_blocking(move || {
+            crate::system_ops::list_files_for_mentions(req.roots, max_results)
+        })
+        .await
+        .internal_err()?;
+        Ok(ListFilesForMentionsResponse { files })
+    }
+
+    #[custom_method(ReadImageAttachmentRequest)]
+    async fn on_read_image_attachment(
+        &self,
+        req: ReadImageAttachmentRequest,
+    ) -> Result<ReadImageAttachmentResponse, sacp::Error> {
+        let payload = crate::system_ops::read_image_attachment(&req.path).invalid_params_err()?;
+        Ok(ReadImageAttachmentResponse {
+            base64: payload.base64,
+            mime_type: payload.mime_type,
+        })
+    }
+
+    #[custom_method(WriteFileRequest)]
+    async fn on_write_file(&self, req: WriteFileRequest) -> Result<EmptyResponse, sacp::Error> {
+        crate::system_ops::write_file(&req.path, &req.contents).internal_err()?;
+        Ok(EmptyResponse {})
+    }
 }
 
 fn dictation_model_config_key(provider: DictationProvider) -> Option<String> {

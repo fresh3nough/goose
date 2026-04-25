@@ -4376,6 +4376,7 @@ dependencies = [
  "libc",
  "llama-cpp-2",
  "lru",
+ "mime_guess",
  "minijinja",
  "mockall",
  "nanoid",

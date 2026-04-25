@@ -35,6 +35,8 @@ import type {
   ExportSourceResponse,
   GetExtensionsRequest,
   GetExtensionsResponse,
+  GetHomeDirRequest,
+  GetHomeDirResponse,
   GetSessionExtensionsRequest,
   GetSessionExtensionsResponse,
   GetToolsRequest,
@@ -43,12 +45,22 @@ import type {
   ImportSessionResponse,
   ImportSourcesRequest,
   ImportSourcesResponse,
+  InspectAttachmentPathsRequest,
+  InspectAttachmentPathsResponse,
+  ListDirectoryEntriesRequest,
+  ListDirectoryEntriesResponse,
+  ListFilesForMentionsRequest,
+  ListFilesForMentionsResponse,
   ListProvidersRequest,
   ListProvidersResponse,
   ListSourcesRequest,
   ListSourcesResponse,
+  PathExistsRequest,
+  PathExistsResponse,
   ReadConfigRequest,
   ReadConfigResponse,
+  ReadImageAttachmentRequest,
+  ReadImageAttachmentResponse,
   ReadResourceRequest,
   ReadResourceResponse,
   RefreshProviderInventoryRequest,
@@ -66,6 +78,7 @@ import type {
   UpdateWorkingDirRequest,
   UpsertConfigRequest,
   UpsertSecretRequest,
+  WriteFileRequest,
 } from './types.gen.js';
 import {
   zCheckSecretResponse,
@@ -77,13 +90,19 @@ import {
   zExportSessionResponse,
   zExportSourceResponse,
   zGetExtensionsResponse,
+  zGetHomeDirResponse,
   zGetSessionExtensionsResponse,
   zGetToolsResponse,
   zImportSessionResponse,
   zImportSourcesResponse,
+  zInspectAttachmentPathsResponse,
+  zListDirectoryEntriesResponse,
+  zListFilesForMentionsResponse,
   zListProvidersResponse,
   zListSourcesResponse,
+  zPathExistsResponse,
   zReadConfigResponse,
+  zReadImageAttachmentResponse,
   zReadResourceResponse,
   zRefreshProviderInventoryResponse,
   zUpdateSourceResponse,
@@ -339,5 +358,71 @@ export class GooseExtClient {
     params: DictationModelSelectRequest,
   ): Promise<void> {
     await this.conn.extMethod("_goose/dictation/model/select", params);
+  }
+
+  async GooseSystemHomeDir(
+    params: GetHomeDirRequest,
+  ): Promise<GetHomeDirResponse> {
+    const raw = await this.conn.extMethod("_goose/system/home_dir", params);
+    return zGetHomeDirResponse.parse(raw) as GetHomeDirResponse;
+  }
+
+  async GooseSystemPathExists(
+    params: PathExistsRequest,
+  ): Promise<PathExistsResponse> {
+    const raw = await this.conn.extMethod("_goose/system/path_exists", params);
+    return zPathExistsResponse.parse(raw) as PathExistsResponse;
+  }
+
+  async GooseSystemListDirectoryEntries(
+    params: ListDirectoryEntriesRequest,
+  ): Promise<ListDirectoryEntriesResponse> {
+    const raw = await this.conn.extMethod(
+      "_goose/system/list_directory_entries",
+      params,
+    );
+    return zListDirectoryEntriesResponse.parse(
+      raw,
+    ) as ListDirectoryEntriesResponse;
+  }
+
+  async GooseSystemInspectAttachmentPaths(
+    params: InspectAttachmentPathsRequest,
+  ): Promise<InspectAttachmentPathsResponse> {
+    const raw = await this.conn.extMethod(
+      "_goose/system/inspect_attachment_paths",
+      params,
+    );
+    return zInspectAttachmentPathsResponse.parse(
+      raw,
+    ) as InspectAttachmentPathsResponse;
+  }
+
+  async GooseSystemListFilesForMentions(
+    params: ListFilesForMentionsRequest,
+  ): Promise<ListFilesForMentionsResponse> {
+    const raw = await this.conn.extMethod(
+      "_goose/system/list_files_for_mentions",
+      params,
+    );
+    return zListFilesForMentionsResponse.parse(
+      raw,
+    ) as ListFilesForMentionsResponse;
+  }
+
+  async GooseSystemReadImageAttachment(
+    params: ReadImageAttachmentRequest,
+  ): Promise<ReadImageAttachmentResponse> {
+    const raw = await this.conn.extMethod(
+      "_goose/system/read_image_attachment",
+      params,
+    );
+    return zReadImageAttachmentResponse.parse(
+      raw,
+    ) as ReadImageAttachmentResponse;
+  }
+
+  async GooseSystemWriteFile(params: WriteFileRequest): Promise<void> {
+    await this.conn.extMethod("_goose/system/write_file", params);
   }
 }
