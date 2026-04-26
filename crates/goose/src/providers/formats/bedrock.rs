@@ -55,13 +55,29 @@ pub fn to_bedrock_message_content(content: &MessageContent) -> Result<bedrock::C
         MessageContent::Image(image) => {
             bedrock::ContentBlock::Image(to_bedrock_image(&image.data, &image.mime_type)?)
         }
-        MessageContent::Thinking(_) => {
-            // Thinking blocks are not supported in Bedrock - skip
-            bedrock::ContentBlock::Text("".to_string())
+        MessageContent::Thinking(thinking) => {
+            // Bedrock reasoning models (e.g. Claude with reasoning, openai.gpt-oss-*)
+            // require the original reasoning text to be replayed unmodified, with
+            // its signature, in subsequent Converse calls. Re-emit the reasoning
+            // block instead of dropping it as empty text.
+            let mut builder = bedrock::ReasoningTextBlock::builder().text(&thinking.thinking);
+            if !thinking.signature.is_empty() {
+                builder = builder.signature(&thinking.signature);
+            }
+            bedrock::ContentBlock::ReasoningContent(bedrock::ReasoningContentBlock::ReasoningText(
+                builder.build()?,
+            ))
         }
-        MessageContent::RedactedThinking(_) => {
-            // Redacted thinking blocks are not supported in Bedrock - skip
-            bedrock::ContentBlock::Text("".to_string())
+        MessageContent::RedactedThinking(redacted) => {
+            // Replay encrypted reasoning bytes verbatim. Goose stored them as
+            // base64 when reading them off the wire (see
+            // from_bedrock_reasoning_content_block), so decode before sending.
+            let bytes = base64::prelude::BASE64_STANDARD
+                .decode(&redacted.data)
+                .map_err(|e| anyhow!("Failed to decode redacted reasoning data: {}", e))?;
+            bedrock::ContentBlock::ReasoningContent(
+                bedrock::ReasoningContentBlock::RedactedContent(aws_smithy_types::Blob::new(bytes)),
+            )
         }
         MessageContent::SystemNotification(_) => {
             bail!("SystemNotification should not get passed to the provider")
@@ -674,6 +690,127 @@ mod tests {
                 assert_eq!(redacted.data, expected);
             }
             other => panic!("Expected RedactedThinking content, got {:?}", other),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_to_bedrock_message_content_thinking() -> Result<()> {
+        // Thinking content must round-trip back into a Bedrock
+        // ReasoningContent::ReasoningText block so subsequent Converse calls
+        // include the original reasoning text and signature unmodified, as
+        // required by Bedrock reasoning models.
+        let message_content = MessageContent::thinking("because of X", "sig-abc");
+        let block = to_bedrock_message_content(&message_content)?;
+
+        match block {
+            bedrock::ContentBlock::ReasoningContent(
+                bedrock::ReasoningContentBlock::ReasoningText(text_block),
+            ) => {
+                assert_eq!(text_block.text, "because of X");
+                assert_eq!(text_block.signature.as_deref(), Some("sig-abc"));
+            }
+            other => panic!("Expected ReasoningContent::ReasoningText, got {:?}", other),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_to_bedrock_message_content_thinking_without_signature() -> Result<()> {
+        // An empty signature must not be sent to Bedrock as the empty string;
+        // the field should be omitted so the SDK treats it as absent.
+        let message_content = MessageContent::thinking("silent reasoning", "");
+        let block = to_bedrock_message_content(&message_content)?;
+
+        match block {
+            bedrock::ContentBlock::ReasoningContent(
+                bedrock::ReasoningContentBlock::ReasoningText(text_block),
+            ) => {
+                assert_eq!(text_block.text, "silent reasoning");
+                assert!(text_block.signature.is_none());
+            }
+            other => panic!("Expected ReasoningContent::ReasoningText, got {:?}", other),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_to_bedrock_message_content_redacted_thinking() -> Result<()> {
+        // Redacted reasoning bytes are stored as base64 internally; sending
+        // them back to Bedrock must decode the base64 so the SDK transmits the
+        // original encrypted bytes verbatim.
+        let raw = b"encrypted-reasoning-bytes";
+        let encoded = base64::prelude::BASE64_STANDARD.encode(raw);
+        let message_content = MessageContent::redacted_thinking(encoded);
+
+        let block = to_bedrock_message_content(&message_content)?;
+        match block {
+            bedrock::ContentBlock::ReasoningContent(
+                bedrock::ReasoningContentBlock::RedactedContent(blob),
+            ) => {
+                assert_eq!(blob.as_ref(), raw);
+            }
+            other => panic!(
+                "Expected ReasoningContent::RedactedContent, got {:?}",
+                other
+            ),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_bedrock_thinking_round_trip() -> Result<()> {
+        // End-to-end: a Bedrock ReasoningContent block read in via
+        // from_bedrock_content_block must serialize back to an equivalent
+        // ReasoningContent block via to_bedrock_message_content, preserving
+        // both the reasoning text and its signature.
+        let original =
+            bedrock::ContentBlock::ReasoningContent(bedrock::ReasoningContentBlock::ReasoningText(
+                bedrock::ReasoningTextBlock::builder()
+                    .text("chain of thought")
+                    .signature("sig-xyz")
+                    .build()?,
+            ));
+
+        let message_content =
+            from_bedrock_content_block(&original)?.expect("reasoning content should be preserved");
+        let round_tripped = to_bedrock_message_content(&message_content)?;
+
+        match round_tripped {
+            bedrock::ContentBlock::ReasoningContent(
+                bedrock::ReasoningContentBlock::ReasoningText(text_block),
+            ) => {
+                assert_eq!(text_block.text, "chain of thought");
+                assert_eq!(text_block.signature.as_deref(), Some("sig-xyz"));
+            }
+            other => panic!("Expected ReasoningContent::ReasoningText, got {:?}", other),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_bedrock_redacted_thinking_round_trip() -> Result<()> {
+        let raw = b"encrypted-reasoning-bytes";
+        let original = bedrock::ContentBlock::ReasoningContent(
+            bedrock::ReasoningContentBlock::RedactedContent(aws_smithy_types::Blob::new(
+                raw.to_vec(),
+            )),
+        );
+
+        let message_content =
+            from_bedrock_content_block(&original)?.expect("redacted reasoning should be preserved");
+        let round_tripped = to_bedrock_message_content(&message_content)?;
+
+        match round_tripped {
+            bedrock::ContentBlock::ReasoningContent(
+                bedrock::ReasoningContentBlock::RedactedContent(blob),
+            ) => {
+                assert_eq!(blob.as_ref(), raw);
+            }
+            other => panic!(
+                "Expected ReasoningContent::RedactedContent, got {:?}",
+                other
+            ),
         }
         Ok(())
     }
