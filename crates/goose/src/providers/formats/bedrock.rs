@@ -69,15 +69,30 @@ pub fn to_bedrock_message_content(content: &MessageContent) -> Result<bedrock::C
             ))
         }
         MessageContent::RedactedThinking(redacted) => {
-            // Replay encrypted reasoning bytes verbatim. Goose stored them as
+            // Replay encrypted reasoning bytes verbatim. Bedrock stores them as
             // base64 when reading them off the wire (see
             // from_bedrock_reasoning_content_block), so decode before sending.
-            let bytes = base64::prelude::BASE64_STANDARD
-                .decode(&redacted.data)
-                .map_err(|e| anyhow!("Failed to decode redacted reasoning data: {}", e))?;
-            bedrock::ContentBlock::ReasoningContent(
-                bedrock::ReasoningContentBlock::RedactedContent(aws_smithy_types::Blob::new(bytes)),
-            )
+            //
+            // RedactedThinking is also produced by other providers (e.g. the
+            // Anthropic API) which treat `data` as an opaque payload rather
+            // than guaranteed base64. To preserve cross-provider conversation
+            // history we fall back to dropping the block (matching the
+            // pre-existing skip behaviour) when the payload isn't decodable as
+            // base64, instead of aborting the request.
+            match base64::prelude::BASE64_STANDARD.decode(&redacted.data) {
+                Ok(bytes) => bedrock::ContentBlock::ReasoningContent(
+                    bedrock::ReasoningContentBlock::RedactedContent(aws_smithy_types::Blob::new(
+                        bytes,
+                    )),
+                ),
+                Err(err) => {
+                    tracing::warn!(
+                        "Dropping non-base64 RedactedThinking content when sending to Bedrock: {}",
+                        err
+                    );
+                    bedrock::ContentBlock::Text("".to_string())
+                }
+            }
         }
         MessageContent::SystemNotification(_) => {
             bail!("SystemNotification should not get passed to the provider")
@@ -328,9 +343,11 @@ pub fn from_bedrock_message(message: &bedrock::Message) -> Result<Message> {
 
 /// Convert a Bedrock `ContentBlock` into a Goose `MessageContent`.
 ///
-/// Returns `Ok(None)` for blocks that should be silently ignored (for example,
-/// blocks of a type that Goose does not currently model). A warning is logged
-/// for any such block so that operators can detect it during debugging.
+/// Returns `Ok(None)` only when the block belongs to a variant the SDK does
+/// not recognise (the `non_exhaustive` `Unknown` arm). Known content-bearing
+/// variants that Goose cannot represent return an error so that the caller
+/// fails fast rather than silently truncating responses (e.g. dropping
+/// guardrail or multimodal output).
 pub fn from_bedrock_content_block(block: &bedrock::ContentBlock) -> Result<Option<MessageContent>> {
     Ok(match block {
         bedrock::ContentBlock::Text(text) => Some(MessageContent::text(text)),
@@ -363,9 +380,22 @@ pub fn from_bedrock_content_block(block: &bedrock::ContentBlock) -> Result<Optio
             // Filtered upstream in from_bedrock_message
             bail!("CachePoint blocks should have been filtered out during message processing")
         }
+        bedrock::ContentBlock::Audio(_)
+        | bedrock::ContentBlock::Document(_)
+        | bedrock::ContentBlock::GuardContent(_)
+        | bedrock::ContentBlock::Image(_)
+        | bedrock::ContentBlock::Video(_) => bail!(
+            "Unsupported Bedrock content block type: {}",
+            bedrock_content_block_kind(block)
+        ),
         other => {
+            // Forward-compatibility for future SDK additions (the
+            // `non_exhaustive` `Unknown` arm and any not-yet-released
+            // variants). Surface a warning instead of bailing so the caller
+            // does not break against an updated SDK before we add explicit
+            // handling, but still record it for operators.
             tracing::warn!(
-                "Skipping unsupported Bedrock content block: {:?}",
+                "Skipping unrecognised Bedrock content block: {:?}",
                 bedrock_content_block_kind(other)
             );
             None
@@ -676,6 +706,31 @@ mod tests {
     }
 
     #[test]
+    fn test_from_bedrock_content_block_unsupported_type_errors() {
+        // Known content-bearing variants Goose cannot yet represent (Image,
+        // Document, GuardContent, Audio, Video) must surface a clear error
+        // instead of silently dropping the block, so multimodal/guardrail
+        // output is never truncated without the caller noticing.
+        let image_block = bedrock::ImageBlock::builder()
+            .format(bedrock::ImageFormat::Png)
+            .source(bedrock::ImageSource::Bytes(aws_smithy_types::Blob::new(
+                Vec::new(),
+            )))
+            .build()
+            .unwrap();
+        let content_block = bedrock::ContentBlock::Image(image_block);
+
+        let err = from_bedrock_content_block(&content_block)
+            .expect_err("unsupported variant should error");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Unsupported Bedrock content block type"),
+            "got: {msg}"
+        );
+        assert!(msg.contains("Image"), "got: {msg}");
+    }
+
+    #[test]
     fn test_from_bedrock_content_block_reasoning_redacted_content() -> Result<()> {
         let raw = b"encrypted-reasoning-bytes";
         let blob = aws_smithy_types::Blob::new(raw.to_vec());
@@ -752,6 +807,26 @@ mod tests {
             }
             other => panic!(
                 "Expected ReasoningContent::RedactedContent, got {:?}",
+                other
+            ),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_to_bedrock_message_content_redacted_thinking_opaque_payload() -> Result<()> {
+        // RedactedThinking.data is treated as an opaque provider payload by
+        // other providers (e.g. Anthropic). Switching such a conversation to
+        // Bedrock must not abort the request when the payload isn't valid
+        // base64; instead the block is dropped (matching the historical skip
+        // behaviour) so the rest of the turn still goes through.
+        let message_content = MessageContent::redacted_thinking("opaque_not_base64!@#".to_string());
+
+        let block = to_bedrock_message_content(&message_content)?;
+        match block {
+            bedrock::ContentBlock::Text(text) => assert_eq!(text, ""),
+            other => panic!(
+                "Expected fallback empty Text block for opaque payload, got {:?}",
                 other
             ),
         }
