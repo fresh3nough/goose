@@ -303,21 +303,27 @@ pub fn from_bedrock_message(message: &bedrock::Message) -> Result<Message> {
         .iter()
         .filter(|block| !matches!(block, bedrock::ContentBlock::CachePoint(_)))
         .map(from_bedrock_content_block)
+        .filter_map(|result| result.transpose())
         .collect::<Result<Vec<_>>>()?;
     let created = Utc::now().timestamp();
 
     Ok(Message::new(role, created, content))
 }
 
-pub fn from_bedrock_content_block(block: &bedrock::ContentBlock) -> Result<MessageContent> {
+/// Convert a Bedrock `ContentBlock` into a Goose `MessageContent`.
+///
+/// Returns `Ok(None)` for blocks that should be silently ignored (for example,
+/// blocks of a type that Goose does not currently model). A warning is logged
+/// for any such block so that operators can detect it during debugging.
+pub fn from_bedrock_content_block(block: &bedrock::ContentBlock) -> Result<Option<MessageContent>> {
     Ok(match block {
-        bedrock::ContentBlock::Text(text) => MessageContent::text(text),
-        bedrock::ContentBlock::ToolUse(tool_use) => MessageContent::tool_request(
+        bedrock::ContentBlock::Text(text) => Some(MessageContent::text(text)),
+        bedrock::ContentBlock::ToolUse(tool_use) => Some(MessageContent::tool_request(
             tool_use.tool_use_id.to_string(),
             Ok(CallToolRequestParams::new(tool_use.name.clone())
                 .with_arguments(object(from_bedrock_json(&tool_use.input.clone())?))),
-        ),
-        bedrock::ContentBlock::ToolResult(tool_res) => MessageContent::tool_response(
+        )),
+        bedrock::ContentBlock::ToolResult(tool_res) => Some(MessageContent::tool_response(
             tool_res.tool_use_id.to_string(),
             if tool_res.content.is_empty() {
                 Err(ErrorData {
@@ -333,13 +339,68 @@ pub fn from_bedrock_content_block(block: &bedrock::ContentBlock) -> Result<Messa
                     .collect::<ToolResult<Vec<_>>>()
                     .map(rmcp::model::CallToolResult::success)
             },
-        ),
+        )),
+        bedrock::ContentBlock::ReasoningContent(reasoning) => {
+            from_bedrock_reasoning_content_block(reasoning)
+        }
         bedrock::ContentBlock::CachePoint(_) => {
             // Filtered upstream in from_bedrock_message
             bail!("CachePoint blocks should have been filtered out during message processing")
         }
-        _ => bail!("Unsupported content block type from Bedrock"),
+        other => {
+            tracing::warn!(
+                "Skipping unsupported Bedrock content block: {:?}",
+                bedrock_content_block_kind(other)
+            );
+            None
+        }
     })
+}
+
+/// Convert a Bedrock `ReasoningContentBlock` into a Goose `MessageContent`.
+///
+/// Reasoning text is mapped to `MessageContent::Thinking` and redacted
+/// reasoning content (encrypted by the model provider) is mapped to
+/// `MessageContent::RedactedThinking` so it can be preserved across turns.
+fn from_bedrock_reasoning_content_block(
+    reasoning: &bedrock::ReasoningContentBlock,
+) -> Option<MessageContent> {
+    match reasoning {
+        bedrock::ReasoningContentBlock::ReasoningText(text_block) => {
+            let signature = text_block.signature.clone().unwrap_or_default();
+            Some(MessageContent::thinking(text_block.text.clone(), signature))
+        }
+        bedrock::ReasoningContentBlock::RedactedContent(blob) => {
+            let encoded = base64::prelude::BASE64_STANDARD.encode(blob.as_ref());
+            Some(MessageContent::redacted_thinking(encoded))
+        }
+        other => {
+            tracing::warn!(
+                "Skipping unknown Bedrock ReasoningContent variant: {:?}",
+                other
+            );
+            None
+        }
+    }
+}
+
+/// Returns a short, stable identifier describing the variant of a
+/// `ContentBlock` for logging purposes. The block itself is not included to
+/// avoid leaking model output into logs.
+fn bedrock_content_block_kind(block: &bedrock::ContentBlock) -> &'static str {
+    match block {
+        bedrock::ContentBlock::Audio(_) => "Audio",
+        bedrock::ContentBlock::CachePoint(_) => "CachePoint",
+        bedrock::ContentBlock::Document(_) => "Document",
+        bedrock::ContentBlock::GuardContent(_) => "GuardContent",
+        bedrock::ContentBlock::Image(_) => "Image",
+        bedrock::ContentBlock::ReasoningContent(_) => "ReasoningContent",
+        bedrock::ContentBlock::Text(_) => "Text",
+        bedrock::ContentBlock::ToolResult(_) => "ToolResult",
+        bedrock::ContentBlock::ToolUse(_) => "ToolUse",
+        bedrock::ContentBlock::Video(_) => "Video",
+        _ => "Unknown",
+    }
 }
 
 pub fn from_bedrock_tool_result_content_block(
@@ -550,6 +611,112 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("CachePoint blocks should have been filtered out"));
+    }
+
+    #[test]
+    fn test_from_bedrock_content_block_reasoning_text() -> Result<()> {
+        // Models such as the OpenAI gpt-oss family on Bedrock may return
+        // ReasoningContent blocks alongside the assistant's text. Goose should
+        // surface these as Thinking content rather than failing the request.
+        let reasoning_text = bedrock::ReasoningTextBlock::builder()
+            .text("step-by-step reasoning")
+            .signature("sig-token")
+            .build()?;
+        let content_block = bedrock::ContentBlock::ReasoningContent(
+            bedrock::ReasoningContentBlock::ReasoningText(reasoning_text),
+        );
+
+        let result = from_bedrock_content_block(&content_block)?;
+        match result {
+            Some(MessageContent::Thinking(thinking)) => {
+                assert_eq!(thinking.thinking, "step-by-step reasoning");
+                assert_eq!(thinking.signature, "sig-token");
+            }
+            other => panic!("Expected Thinking content, got {:?}", other),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_bedrock_content_block_reasoning_text_without_signature() -> Result<()> {
+        // The signature is optional in the Bedrock API; an empty signature
+        // should still produce a Thinking block.
+        let reasoning_text = bedrock::ReasoningTextBlock::builder()
+            .text("reasoning without signature")
+            .build()?;
+        let content_block = bedrock::ContentBlock::ReasoningContent(
+            bedrock::ReasoningContentBlock::ReasoningText(reasoning_text),
+        );
+
+        let result = from_bedrock_content_block(&content_block)?;
+        match result {
+            Some(MessageContent::Thinking(thinking)) => {
+                assert_eq!(thinking.thinking, "reasoning without signature");
+                assert_eq!(thinking.signature, "");
+            }
+            other => panic!("Expected Thinking content, got {:?}", other),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_bedrock_content_block_reasoning_redacted_content() -> Result<()> {
+        let raw = b"encrypted-reasoning-bytes";
+        let blob = aws_smithy_types::Blob::new(raw.to_vec());
+        let content_block = bedrock::ContentBlock::ReasoningContent(
+            bedrock::ReasoningContentBlock::RedactedContent(blob),
+        );
+
+        let result = from_bedrock_content_block(&content_block)?;
+        match result {
+            Some(MessageContent::RedactedThinking(redacted)) => {
+                let expected = base64::prelude::BASE64_STANDARD.encode(raw);
+                assert_eq!(redacted.data, expected);
+            }
+            other => panic!("Expected RedactedThinking content, got {:?}", other),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_bedrock_message_includes_reasoning_content() -> Result<()> {
+        use rmcp::model::Role;
+
+        // Regression test for issue #8751: a message that mixes text with a
+        // reasoning block should convert successfully and preserve both pieces
+        // of content rather than failing with "Unsupported content block
+        // type".
+        let reasoning_text = bedrock::ReasoningTextBlock::builder()
+            .text("thinking out loud")
+            .signature("sig")
+            .build()?;
+
+        let bedrock_message = bedrock::Message::builder()
+            .role(bedrock::ConversationRole::Assistant)
+            .content(bedrock::ContentBlock::ReasoningContent(
+                bedrock::ReasoningContentBlock::ReasoningText(reasoning_text),
+            ))
+            .content(bedrock::ContentBlock::Text("final answer".to_string()))
+            .build()
+            .unwrap();
+
+        let message = from_bedrock_message(&bedrock_message)?;
+
+        assert_eq!(message.role, Role::Assistant);
+        assert_eq!(message.content.len(), 2);
+        match &message.content[0] {
+            MessageContent::Thinking(thinking) => {
+                assert_eq!(thinking.thinking, "thinking out loud");
+                assert_eq!(thinking.signature, "sig");
+            }
+            other => panic!("Expected Thinking content, got {:?}", other),
+        }
+        match &message.content[1] {
+            MessageContent::Text(text) => assert_eq!(text.text, "final answer"),
+            other => panic!("Expected Text content, got {:?}", other),
+        }
+
+        Ok(())
     }
 
     #[test]
