@@ -462,6 +462,150 @@ pub struct ImportSourcesResponse {
     pub sources: Vec<SourceEntry>,
 }
 
+/// A goose-discovered git worktree associated with a repository.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeInfo {
+    pub path: String,
+    pub branch: Option<String>,
+    pub is_main: bool,
+}
+
+/// Snapshot of the local git state for a directory.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GitState {
+    pub is_git_repo: bool,
+    pub current_branch: Option<String>,
+    pub dirty_file_count: u32,
+    pub incoming_commit_count: u32,
+    pub worktrees: Vec<WorktreeInfo>,
+    pub is_worktree: bool,
+    pub main_worktree_path: Option<String>,
+    pub local_branches: Vec<String>,
+}
+
+/// A worktree that was just created by `_goose/git/create_worktree`.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedWorktree {
+    pub path: String,
+    pub branch: String,
+}
+
+/// A single changed file reported by `_goose/git/changed_files`.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangedFile {
+    pub path: String,
+    /// One of `added`, `modified`, `deleted`, `renamed`, `copied`, `untracked`.
+    pub status: String,
+    pub additions: u32,
+    pub deletions: u32,
+}
+
+/// Read git state (current branch, dirty count, worktrees, ...) for a directory.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/git/state", response = GitStateResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStateRequest {
+    pub path: String,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStateResponse {
+    pub state: GitState,
+}
+
+/// List uncommitted/untracked file changes for a directory.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/git/changed_files", response = GitChangedFilesResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitChangedFilesRequest {
+    pub path: String,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitChangedFilesResponse {
+    pub files: Vec<ChangedFile>,
+}
+
+/// Switch the current branch (`git switch <branch>`).
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/git/switch_branch", response = EmptyResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitSwitchBranchRequest {
+    pub path: String,
+    pub branch: String,
+}
+
+/// Stash uncommitted changes (`git stash`).
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/git/stash", response = EmptyResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitStashRequest {
+    pub path: String,
+}
+
+/// Initialize a new git repository (`git init`).
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/git/init", response = EmptyResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitInitRequest {
+    pub path: String,
+}
+
+/// Fetch from the remote with prune (`git fetch --prune`).
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/git/fetch", response = EmptyResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFetchRequest {
+    pub path: String,
+}
+
+/// Fast-forward only pull (`git pull --ff-only`).
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/git/pull", response = EmptyResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitPullRequest {
+    pub path: String,
+}
+
+/// Create a new branch off `baseBranch` and switch to it.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/git/create_branch", response = EmptyResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCreateBranchRequest {
+    pub path: String,
+    pub name: String,
+    pub base_branch: String,
+}
+
+/// Add a new git worktree.
+///
+/// When `createBranch` is true a brand-new branch is created off `baseBranch`;
+/// otherwise `branch` must already exist and is checked out into the worktree.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
+#[request(method = "_goose/git/create_worktree", response = GitCreateWorktreeResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCreateWorktreeRequest {
+    pub path: String,
+    pub name: String,
+    pub branch: String,
+    #[serde(default)]
+    pub create_branch: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_branch: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcResponse)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCreateWorktreeResponse {
+    pub worktree: CreatedWorktree,
+}
+
 /// Transcribe audio via a dictation provider.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, JsonRpcRequest)]
 #[request(method = "_goose/dictation/transcribe", response = DictationTranscribeResponse)]

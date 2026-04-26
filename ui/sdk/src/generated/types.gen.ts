@@ -528,6 +528,135 @@ export type ImportSourcesResponse = {
 };
 
 /**
+ * Read git state (current branch, dirty count, worktrees, ...) for a directory.
+ */
+export type GitStateRequest = {
+    path: string;
+};
+
+export type GitStateResponse = {
+    state: GitState;
+};
+
+/**
+ * Snapshot of the local git state for a directory.
+ */
+export type GitState = {
+    isGitRepo: boolean;
+    currentBranch?: string | null;
+    dirtyFileCount: number;
+    incomingCommitCount: number;
+    worktrees: Array<WorktreeInfo>;
+    isWorktree: boolean;
+    mainWorktreePath?: string | null;
+    localBranches: Array<string>;
+};
+
+/**
+ * A goose-discovered git worktree associated with a repository.
+ */
+export type WorktreeInfo = {
+    path: string;
+    branch?: string | null;
+    isMain: boolean;
+};
+
+/**
+ * List uncommitted/untracked file changes for a directory.
+ */
+export type GitChangedFilesRequest = {
+    path: string;
+};
+
+export type GitChangedFilesResponse = {
+    files: Array<ChangedFile>;
+};
+
+/**
+ * A single changed file reported by `_goose/git/changed_files`.
+ */
+export type ChangedFile = {
+    path: string;
+    /**
+     * One of `added`, `modified`, `deleted`, `renamed`, `copied`, `untracked`.
+     */
+    status: string;
+    additions: number;
+    deletions: number;
+};
+
+/**
+ * Switch the current branch (`git switch <branch>`).
+ */
+export type GitSwitchBranchRequest = {
+    path: string;
+    branch: string;
+};
+
+/**
+ * Stash uncommitted changes (`git stash`).
+ */
+export type GitStashRequest = {
+    path: string;
+};
+
+/**
+ * Initialize a new git repository (`git init`).
+ */
+export type GitInitRequest = {
+    path: string;
+};
+
+/**
+ * Fetch from the remote with prune (`git fetch --prune`).
+ */
+export type GitFetchRequest = {
+    path: string;
+};
+
+/**
+ * Fast-forward only pull (`git pull --ff-only`).
+ */
+export type GitPullRequest = {
+    path: string;
+};
+
+/**
+ * Create a new branch off `baseBranch` and switch to it.
+ */
+export type GitCreateBranchRequest = {
+    path: string;
+    name: string;
+    baseBranch: string;
+};
+
+/**
+ * Add a new git worktree.
+ *
+ * When `createBranch` is true a brand-new branch is created off `baseBranch`;
+ * otherwise `branch` must already exist and is checked out into the worktree.
+ */
+export type GitCreateWorktreeRequest = {
+    path: string;
+    name: string;
+    branch: string;
+    createBranch?: boolean;
+    baseBranch?: string | null;
+};
+
+export type GitCreateWorktreeResponse = {
+    worktree: CreatedWorktree;
+};
+
+/**
+ * A worktree that was just created by `_goose/git/create_worktree`.
+ */
+export type CreatedWorktree = {
+    path: string;
+    branch: string;
+};
+
+/**
  * Transcribe audio via a dictation provider.
  */
 export type DictationTranscribeRequest = {
@@ -667,14 +796,14 @@ export type DictationModelSelectRequest = {
 export type ExtRequest = {
     id: string;
     method: string;
-    params?: AddExtensionRequest | RemoveExtensionRequest | GetToolsRequest | ReadResourceRequest | UpdateWorkingDirRequest | DeleteSessionRequest | GetExtensionsRequest | AddConfigExtensionRequest | RemoveConfigExtensionRequest | ToggleConfigExtensionRequest | GetSessionExtensionsRequest | ListProvidersRequest | RefreshProviderInventoryRequest | ReadConfigRequest | UpsertConfigRequest | RemoveConfigRequest | CheckSecretRequest | UpsertSecretRequest | RemoveSecretRequest | ExportSessionRequest | ImportSessionRequest | UpdateSessionProjectRequest | RenameSessionRequest | ArchiveSessionRequest | UnarchiveSessionRequest | CreateSourceRequest | ListSourcesRequest | UpdateSourceRequest | DeleteSourceRequest | ExportSourceRequest | ImportSourcesRequest | DictationTranscribeRequest | DictationConfigRequest | DictationModelsListRequest | DictationModelDownloadRequest | DictationModelDownloadProgressRequest | DictationModelCancelRequest | DictationModelDeleteRequest | DictationModelSelectRequest | {
+    params?: AddExtensionRequest | RemoveExtensionRequest | GetToolsRequest | ReadResourceRequest | UpdateWorkingDirRequest | DeleteSessionRequest | GetExtensionsRequest | AddConfigExtensionRequest | RemoveConfigExtensionRequest | ToggleConfigExtensionRequest | GetSessionExtensionsRequest | ListProvidersRequest | RefreshProviderInventoryRequest | ReadConfigRequest | UpsertConfigRequest | RemoveConfigRequest | CheckSecretRequest | UpsertSecretRequest | RemoveSecretRequest | ExportSessionRequest | ImportSessionRequest | UpdateSessionProjectRequest | RenameSessionRequest | ArchiveSessionRequest | UnarchiveSessionRequest | CreateSourceRequest | ListSourcesRequest | UpdateSourceRequest | DeleteSourceRequest | ExportSourceRequest | ImportSourcesRequest | GitStateRequest | GitChangedFilesRequest | GitSwitchBranchRequest | GitStashRequest | GitInitRequest | GitFetchRequest | GitPullRequest | GitCreateBranchRequest | GitCreateWorktreeRequest | DictationTranscribeRequest | DictationConfigRequest | DictationModelsListRequest | DictationModelDownloadRequest | DictationModelDownloadProgressRequest | DictationModelCancelRequest | DictationModelDeleteRequest | DictationModelSelectRequest | {
         [key: string]: unknown;
     } | null;
 };
 
 export type ExtResponse = {
     id: string;
-    result?: EmptyResponse | GetToolsResponse | ReadResourceResponse | GetExtensionsResponse | GetSessionExtensionsResponse | ListProvidersResponse | RefreshProviderInventoryResponse | ReadConfigResponse | CheckSecretResponse | ExportSessionResponse | ImportSessionResponse | CreateSourceResponse | ListSourcesResponse | UpdateSourceResponse | ExportSourceResponse | ImportSourcesResponse | DictationTranscribeResponse | DictationConfigResponse | DictationModelsListResponse | DictationModelDownloadProgressResponse | unknown;
+    result?: EmptyResponse | GetToolsResponse | ReadResourceResponse | GetExtensionsResponse | GetSessionExtensionsResponse | ListProvidersResponse | RefreshProviderInventoryResponse | ReadConfigResponse | CheckSecretResponse | ExportSessionResponse | ImportSessionResponse | CreateSourceResponse | ListSourcesResponse | UpdateSourceResponse | ExportSourceResponse | ImportSourcesResponse | GitStateResponse | GitChangedFilesResponse | GitCreateWorktreeResponse | DictationTranscribeResponse | DictationConfigResponse | DictationModelsListResponse | DictationModelDownloadProgressResponse | unknown;
 } | {
     error: {
         code: number;

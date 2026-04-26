@@ -39,6 +39,18 @@ import type {
   GetSessionExtensionsResponse,
   GetToolsRequest,
   GetToolsResponse,
+  GitChangedFilesRequest,
+  GitChangedFilesResponse,
+  GitCreateBranchRequest,
+  GitCreateWorktreeRequest,
+  GitCreateWorktreeResponse,
+  GitFetchRequest,
+  GitInitRequest,
+  GitPullRequest,
+  GitStashRequest,
+  GitStateRequest,
+  GitStateResponse,
+  GitSwitchBranchRequest,
   ImportSessionRequest,
   ImportSessionResponse,
   ImportSourcesRequest,
@@ -79,6 +91,9 @@ import {
   zGetExtensionsResponse,
   zGetSessionExtensionsResponse,
   zGetToolsResponse,
+  zGitChangedFilesResponse,
+  zGitCreateWorktreeResponse,
+  zGitStateResponse,
   zImportSessionResponse,
   zImportSourcesResponse,
   zListProvidersResponse,
@@ -272,6 +287,49 @@ export class GooseExtClient {
   ): Promise<ImportSourcesResponse> {
     const raw = await this.conn.extMethod("_goose/sources/import", params);
     return zImportSourcesResponse.parse(raw) as ImportSourcesResponse;
+  }
+
+  async GooseGitState(params: GitStateRequest): Promise<GitStateResponse> {
+    const raw = await this.conn.extMethod("_goose/git/state", params);
+    return zGitStateResponse.parse(raw) as GitStateResponse;
+  }
+
+  async GooseGitChangedFiles(
+    params: GitChangedFilesRequest,
+  ): Promise<GitChangedFilesResponse> {
+    const raw = await this.conn.extMethod("_goose/git/changed_files", params);
+    return zGitChangedFilesResponse.parse(raw) as GitChangedFilesResponse;
+  }
+
+  async GooseGitSwitchBranch(params: GitSwitchBranchRequest): Promise<void> {
+    await this.conn.extMethod("_goose/git/switch_branch", params);
+  }
+
+  async GooseGitStash(params: GitStashRequest): Promise<void> {
+    await this.conn.extMethod("_goose/git/stash", params);
+  }
+
+  async GooseGitInit(params: GitInitRequest): Promise<void> {
+    await this.conn.extMethod("_goose/git/init", params);
+  }
+
+  async GooseGitFetch(params: GitFetchRequest): Promise<void> {
+    await this.conn.extMethod("_goose/git/fetch", params);
+  }
+
+  async GooseGitPull(params: GitPullRequest): Promise<void> {
+    await this.conn.extMethod("_goose/git/pull", params);
+  }
+
+  async GooseGitCreateBranch(params: GitCreateBranchRequest): Promise<void> {
+    await this.conn.extMethod("_goose/git/create_branch", params);
+  }
+
+  async GooseGitCreateWorktree(
+    params: GitCreateWorktreeRequest,
+  ): Promise<GitCreateWorktreeResponse> {
+    const raw = await this.conn.extMethod("_goose/git/create_worktree", params);
+    return zGitCreateWorktreeResponse.parse(raw) as GitCreateWorktreeResponse;
   }
 
   async GooseDictationTranscribe(

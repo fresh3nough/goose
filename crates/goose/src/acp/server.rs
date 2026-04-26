@@ -3250,6 +3250,79 @@ impl GooseAcpAgent {
         Ok(ImportSourcesResponse { sources })
     }
 
+    #[custom_method(GitStateRequest)]
+    async fn on_git_state(&self, req: GitStateRequest) -> Result<GitStateResponse, sacp::Error> {
+        let state = crate::git::get_git_state(&req.path).invalid_params_err()?;
+        Ok(GitStateResponse { state })
+    }
+
+    #[custom_method(GitChangedFilesRequest)]
+    async fn on_git_changed_files(
+        &self,
+        req: GitChangedFilesRequest,
+    ) -> Result<GitChangedFilesResponse, sacp::Error> {
+        let files = crate::git::get_changed_files(&req.path).invalid_params_err()?;
+        Ok(GitChangedFilesResponse { files })
+    }
+
+    #[custom_method(GitSwitchBranchRequest)]
+    async fn on_git_switch_branch(
+        &self,
+        req: GitSwitchBranchRequest,
+    ) -> Result<EmptyResponse, sacp::Error> {
+        crate::git::switch_branch(&req.path, &req.branch).invalid_params_err()?;
+        Ok(EmptyResponse {})
+    }
+
+    #[custom_method(GitStashRequest)]
+    async fn on_git_stash(&self, req: GitStashRequest) -> Result<EmptyResponse, sacp::Error> {
+        crate::git::stash(&req.path).invalid_params_err()?;
+        Ok(EmptyResponse {})
+    }
+
+    #[custom_method(GitInitRequest)]
+    async fn on_git_init(&self, req: GitInitRequest) -> Result<EmptyResponse, sacp::Error> {
+        crate::git::init(&req.path).invalid_params_err()?;
+        Ok(EmptyResponse {})
+    }
+
+    #[custom_method(GitFetchRequest)]
+    async fn on_git_fetch(&self, req: GitFetchRequest) -> Result<EmptyResponse, sacp::Error> {
+        crate::git::fetch(&req.path).invalid_params_err()?;
+        Ok(EmptyResponse {})
+    }
+
+    #[custom_method(GitPullRequest)]
+    async fn on_git_pull(&self, req: GitPullRequest) -> Result<EmptyResponse, sacp::Error> {
+        crate::git::pull(&req.path).invalid_params_err()?;
+        Ok(EmptyResponse {})
+    }
+
+    #[custom_method(GitCreateBranchRequest)]
+    async fn on_git_create_branch(
+        &self,
+        req: GitCreateBranchRequest,
+    ) -> Result<EmptyResponse, sacp::Error> {
+        crate::git::create_branch(&req.path, &req.name, &req.base_branch).invalid_params_err()?;
+        Ok(EmptyResponse {})
+    }
+
+    #[custom_method(GitCreateWorktreeRequest)]
+    async fn on_git_create_worktree(
+        &self,
+        req: GitCreateWorktreeRequest,
+    ) -> Result<GitCreateWorktreeResponse, sacp::Error> {
+        let worktree = crate::git::create_worktree(
+            &req.path,
+            &req.name,
+            &req.branch,
+            req.create_branch,
+            req.base_branch.as_deref(),
+        )
+        .invalid_params_err()?;
+        Ok(GitCreateWorktreeResponse { worktree })
+    }
+
     #[custom_method(DictationTranscribeRequest)]
     async fn on_dictation_transcribe(
         &self,

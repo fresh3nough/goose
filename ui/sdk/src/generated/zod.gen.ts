@@ -471,6 +471,144 @@ export const zImportSourcesResponse = z.object({
 });
 
 /**
+ * Read git state (current branch, dirty count, worktrees, ...) for a directory.
+ */
+export const zGitStateRequest = z.object({
+    path: z.string()
+});
+
+/**
+ * A goose-discovered git worktree associated with a repository.
+ */
+export const zWorktreeInfo = z.object({
+    path: z.string(),
+    branch: z.union([
+        z.string(),
+        z.null()
+    ]).optional(),
+    isMain: z.boolean()
+});
+
+/**
+ * Snapshot of the local git state for a directory.
+ */
+export const zGitState = z.object({
+    isGitRepo: z.boolean(),
+    currentBranch: z.union([
+        z.string(),
+        z.null()
+    ]).optional(),
+    dirtyFileCount: z.number().int().gte(0),
+    incomingCommitCount: z.number().int().gte(0),
+    worktrees: z.array(zWorktreeInfo),
+    isWorktree: z.boolean(),
+    mainWorktreePath: z.union([
+        z.string(),
+        z.null()
+    ]).optional(),
+    localBranches: z.array(z.string())
+});
+
+export const zGitStateResponse = z.object({
+    state: zGitState
+});
+
+/**
+ * List uncommitted/untracked file changes for a directory.
+ */
+export const zGitChangedFilesRequest = z.object({
+    path: z.string()
+});
+
+/**
+ * A single changed file reported by `_goose/git/changed_files`.
+ */
+export const zChangedFile = z.object({
+    path: z.string(),
+    status: z.string(),
+    additions: z.number().int().gte(0),
+    deletions: z.number().int().gte(0)
+});
+
+export const zGitChangedFilesResponse = z.object({
+    files: z.array(zChangedFile)
+});
+
+/**
+ * Switch the current branch (`git switch <branch>`).
+ */
+export const zGitSwitchBranchRequest = z.object({
+    path: z.string(),
+    branch: z.string()
+});
+
+/**
+ * Stash uncommitted changes (`git stash`).
+ */
+export const zGitStashRequest = z.object({
+    path: z.string()
+});
+
+/**
+ * Initialize a new git repository (`git init`).
+ */
+export const zGitInitRequest = z.object({
+    path: z.string()
+});
+
+/**
+ * Fetch from the remote with prune (`git fetch --prune`).
+ */
+export const zGitFetchRequest = z.object({
+    path: z.string()
+});
+
+/**
+ * Fast-forward only pull (`git pull --ff-only`).
+ */
+export const zGitPullRequest = z.object({
+    path: z.string()
+});
+
+/**
+ * Create a new branch off `baseBranch` and switch to it.
+ */
+export const zGitCreateBranchRequest = z.object({
+    path: z.string(),
+    name: z.string(),
+    baseBranch: z.string()
+});
+
+/**
+ * Add a new git worktree.
+ *
+ * When `createBranch` is true a brand-new branch is created off `baseBranch`;
+ * otherwise `branch` must already exist and is checked out into the worktree.
+ */
+export const zGitCreateWorktreeRequest = z.object({
+    path: z.string(),
+    name: z.string(),
+    branch: z.string(),
+    createBranch: z.boolean().optional().default(false),
+    baseBranch: z.union([
+        z.string(),
+        z.null()
+    ]).optional()
+});
+
+/**
+ * A worktree that was just created by `_goose/git/create_worktree`.
+ */
+export const zCreatedWorktree = z.object({
+    path: z.string(),
+    branch: z.string()
+});
+
+export const zGitCreateWorktreeResponse = z.object({
+    worktree: zCreatedWorktree
+});
+
+/**
  * Transcribe audio via a dictation provider.
  */
 export const zDictationTranscribeRequest = z.object({
@@ -646,6 +784,15 @@ export const zExtRequest = z.object({
             zDeleteSourceRequest,
             zExportSourceRequest,
             zImportSourcesRequest,
+            zGitStateRequest,
+            zGitChangedFilesRequest,
+            zGitSwitchBranchRequest,
+            zGitStashRequest,
+            zGitInitRequest,
+            zGitFetchRequest,
+            zGitPullRequest,
+            zGitCreateBranchRequest,
+            zGitCreateWorktreeRequest,
             zDictationTranscribeRequest,
             zDictationConfigRequest,
             zDictationModelsListRequest,
@@ -683,6 +830,9 @@ export const zExtResponse = z.union([
                 zUpdateSourceResponse,
                 zExportSourceResponse,
                 zImportSourcesResponse,
+                zGitStateResponse,
+                zGitChangedFilesResponse,
+                zGitCreateWorktreeResponse,
                 zDictationTranscribeResponse,
                 zDictationConfigResponse,
                 zDictationModelsListResponse,

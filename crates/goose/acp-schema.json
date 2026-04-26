@@ -1067,6 +1067,321 @@
       "x-side": "agent",
       "x-method": "_goose/sources/import"
     },
+    "GitStateRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "description": "Read git state (current branch, dirty count, worktrees, ...) for a directory.",
+      "x-side": "agent",
+      "x-method": "_goose/git/state"
+    },
+    "GitStateResponse": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/GitState"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "x-side": "agent",
+      "x-method": "_goose/git/state"
+    },
+    "GitState": {
+      "type": "object",
+      "properties": {
+        "isGitRepo": {
+          "type": "boolean"
+        },
+        "currentBranch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dirtyFileCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "incomingCommitCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "worktrees": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WorktreeInfo"
+          }
+        },
+        "isWorktree": {
+          "type": "boolean"
+        },
+        "mainWorktreePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "localBranches": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "isGitRepo",
+        "dirtyFileCount",
+        "incomingCommitCount",
+        "worktrees",
+        "isWorktree",
+        "localBranches"
+      ],
+      "description": "Snapshot of the local git state for a directory."
+    },
+    "WorktreeInfo": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "isMain": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "isMain"
+      ],
+      "description": "A goose-discovered git worktree associated with a repository."
+    },
+    "GitChangedFilesRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "description": "List uncommitted/untracked file changes for a directory.",
+      "x-side": "agent",
+      "x-method": "_goose/git/changed_files"
+    },
+    "GitChangedFilesResponse": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChangedFile"
+          }
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "x-side": "agent",
+      "x-method": "_goose/git/changed_files"
+    },
+    "ChangedFile": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "description": "One of `added`, `modified`, `deleted`, `renamed`, `copied`, `untracked`."
+        },
+        "additions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deletions": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "path",
+        "status",
+        "additions",
+        "deletions"
+      ],
+      "description": "A single changed file reported by `_goose/git/changed_files`."
+    },
+    "GitSwitchBranchRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "branch"
+      ],
+      "description": "Switch the current branch (`git switch <branch>`).",
+      "x-side": "agent",
+      "x-method": "_goose/git/switch_branch"
+    },
+    "GitStashRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "description": "Stash uncommitted changes (`git stash`).",
+      "x-side": "agent",
+      "x-method": "_goose/git/stash"
+    },
+    "GitInitRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "description": "Initialize a new git repository (`git init`).",
+      "x-side": "agent",
+      "x-method": "_goose/git/init"
+    },
+    "GitFetchRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "description": "Fetch from the remote with prune (`git fetch --prune`).",
+      "x-side": "agent",
+      "x-method": "_goose/git/fetch"
+    },
+    "GitPullRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "description": "Fast-forward only pull (`git pull --ff-only`).",
+      "x-side": "agent",
+      "x-method": "_goose/git/pull"
+    },
+    "GitCreateBranchRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "baseBranch": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "name",
+        "baseBranch"
+      ],
+      "description": "Create a new branch off `baseBranch` and switch to it.",
+      "x-side": "agent",
+      "x-method": "_goose/git/create_branch"
+    },
+    "GitCreateWorktreeRequest": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "createBranch": {
+          "type": "boolean",
+          "default": false
+        },
+        "baseBranch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "name",
+        "branch"
+      ],
+      "description": "Add a new git worktree.\n\nWhen `createBranch` is true a brand-new branch is created off `baseBranch`;\notherwise `branch` must already exist and is checked out into the worktree.",
+      "x-side": "agent",
+      "x-method": "_goose/git/create_worktree"
+    },
+    "GitCreateWorktreeResponse": {
+      "type": "object",
+      "properties": {
+        "worktree": {
+          "$ref": "#/$defs/CreatedWorktree"
+        }
+      },
+      "required": [
+        "worktree"
+      ],
+      "x-side": "agent",
+      "x-method": "_goose/git/create_worktree"
+    },
+    "CreatedWorktree": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "branch"
+      ],
+      "description": "A worktree that was just created by `_goose/git/create_worktree`."
+    },
     "DictationTranscribeRequest": {
       "type": "object",
       "properties": {
@@ -1684,6 +1999,87 @@
                 {
                   "allOf": [
                     {
+                      "$ref": "#/$defs/GitStateRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/git/state",
+                  "title": "GitStateRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/GitChangedFilesRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/git/changed_files",
+                  "title": "GitChangedFilesRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/GitSwitchBranchRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/git/switch_branch",
+                  "title": "GitSwitchBranchRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/GitStashRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/git/stash",
+                  "title": "GitStashRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/GitInitRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/git/init",
+                  "title": "GitInitRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/GitFetchRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/git/fetch",
+                  "title": "GitFetchRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/GitPullRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/git/pull",
+                  "title": "GitPullRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/GitCreateBranchRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/git/create_branch",
+                  "title": "GitCreateBranchRequest"
+                },
+                {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/GitCreateWorktreeRequest"
+                    }
+                  ],
+                  "description": "Params for _goose/git/create_worktree",
+                  "title": "GitCreateWorktreeRequest"
+                },
+                {
+                  "allOf": [
+                    {
                       "$ref": "#/$defs/DictationTranscribeRequest"
                     }
                   ],
@@ -1910,6 +2306,30 @@
                         }
                       ],
                       "title": "ImportSourcesResponse"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/GitStateResponse"
+                        }
+                      ],
+                      "title": "GitStateResponse"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/GitChangedFilesResponse"
+                        }
+                      ],
+                      "title": "GitChangedFilesResponse"
+                    },
+                    {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/GitCreateWorktreeResponse"
+                        }
+                      ],
+                      "title": "GitCreateWorktreeResponse"
                     },
                     {
                       "allOf": [

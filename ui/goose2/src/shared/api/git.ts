@@ -1,35 +1,42 @@
-import { invoke } from "@tauri-apps/api/core";
 import type {
   ChangedFile,
   CreatedWorktree,
   GitState,
 } from "@/shared/types/git";
+import { getClient } from "./acpConnection";
 
 export async function getGitState(path: string): Promise<GitState> {
-  return invoke("get_git_state", { path });
+  const client = await getClient();
+  const response = await client.goose.GooseGitState({ path });
+  return response.state as GitState;
 }
 
 export async function switchBranch(
   path: string,
   branch: string,
 ): Promise<void> {
-  return invoke("git_switch_branch", { path, branch });
+  const client = await getClient();
+  await client.goose.GooseGitSwitchBranch({ path, branch });
 }
 
 export async function stashChanges(path: string): Promise<void> {
-  return invoke("git_stash", { path });
+  const client = await getClient();
+  await client.goose.GooseGitStash({ path });
 }
 
 export async function initRepo(path: string): Promise<void> {
-  return invoke("git_init", { path });
+  const client = await getClient();
+  await client.goose.GooseGitInit({ path });
 }
 
 export async function fetchRepo(path: string): Promise<void> {
-  return invoke("git_fetch", { path });
+  const client = await getClient();
+  await client.goose.GooseGitFetch({ path });
 }
 
 export async function pullRepo(path: string): Promise<void> {
-  return invoke("git_pull", { path });
+  const client = await getClient();
+  await client.goose.GooseGitPull({ path });
 }
 
 export async function createBranch(
@@ -37,11 +44,14 @@ export async function createBranch(
   name: string,
   baseBranch: string,
 ): Promise<void> {
-  return invoke("git_create_branch", { path, name, baseBranch });
+  const client = await getClient();
+  await client.goose.GooseGitCreateBranch({ path, name, baseBranch });
 }
 
 export async function getChangedFiles(path: string): Promise<ChangedFile[]> {
-  return invoke("get_changed_files", { path });
+  const client = await getClient();
+  const response = await client.goose.GooseGitChangedFiles({ path });
+  return response.files as ChangedFile[];
 }
 
 export async function createWorktree(
@@ -51,11 +61,13 @@ export async function createWorktree(
   createBranch: boolean,
   baseBranch?: string,
 ): Promise<CreatedWorktree> {
-  return invoke("git_create_worktree", {
+  const client = await getClient();
+  const response = await client.goose.GooseGitCreateWorktree({
     path,
     name,
     branch,
     createBranch,
     baseBranch,
   });
+  return response.worktree as CreatedWorktree;
 }

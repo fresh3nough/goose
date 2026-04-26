@@ -156,6 +156,51 @@
       "responseType": "ImportSourcesResponse"
     },
     {
+      "method": "_goose/git/state",
+      "requestType": "GitStateRequest",
+      "responseType": "GitStateResponse"
+    },
+    {
+      "method": "_goose/git/changed_files",
+      "requestType": "GitChangedFilesRequest",
+      "responseType": "GitChangedFilesResponse"
+    },
+    {
+      "method": "_goose/git/switch_branch",
+      "requestType": "GitSwitchBranchRequest",
+      "responseType": "EmptyResponse"
+    },
+    {
+      "method": "_goose/git/stash",
+      "requestType": "GitStashRequest",
+      "responseType": "EmptyResponse"
+    },
+    {
+      "method": "_goose/git/init",
+      "requestType": "GitInitRequest",
+      "responseType": "EmptyResponse"
+    },
+    {
+      "method": "_goose/git/fetch",
+      "requestType": "GitFetchRequest",
+      "responseType": "EmptyResponse"
+    },
+    {
+      "method": "_goose/git/pull",
+      "requestType": "GitPullRequest",
+      "responseType": "EmptyResponse"
+    },
+    {
+      "method": "_goose/git/create_branch",
+      "requestType": "GitCreateBranchRequest",
+      "responseType": "EmptyResponse"
+    },
+    {
+      "method": "_goose/git/create_worktree",
+      "requestType": "GitCreateWorktreeRequest",
+      "responseType": "GitCreateWorktreeResponse"
+    },
+    {
       "method": "_goose/dictation/transcribe",
       "requestType": "DictationTranscribeRequest",
       "responseType": "DictationTranscribeResponse"
