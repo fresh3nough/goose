@@ -27,10 +27,14 @@ export function useSessionEvents(sessionId: string) {
     abortRef.current = abortController;
 
     (async () => {
+      // The reconnect loop runs for the lifetime of the hook and never
+      // surfaces a terminal "Error" event to listeners on its own. Transient
+      // disconnects (App Nap, sleep/wake, network blips) recover via the
+      // SSE `Last-Event-ID` replay protocol; the only fatal case — the
+      // server's replay buffer overflowing — is signalled by a real `Error`
+      // event from goosed and handled by the chat-stream consumer.
       let retryDelay = 500;
       const MAX_RETRY_DELAY = 10_000;
-      const MAX_CONSECUTIVE_ERRORS = 10;
-      let consecutiveErrors = 0;
       let lastEventId: string | undefined;
 
       while (!abortController.signal.aborted) {
@@ -40,7 +44,7 @@ export function useSessionEvents(sessionId: string) {
             signal: abortController.signal,
             headers: lastEventId ? { 'Last-Event-ID': lastEventId } : undefined,
             // Disable the inner retry loop so errors surface to our outer
-            // loop which tracks consecutive failures and notifies listeners.
+            // loop, which handles backoff.
             sseMaxRetryAttempts: 1,
             onSseEvent: (event) => {
               if (event.id) {
@@ -60,7 +64,6 @@ export function useSessionEvents(sessionId: string) {
               receivedEvent = true;
               setConnected(true);
               retryDelay = 500;
-              consecutiveErrors = 0;
             }
 
             // The server adds chat_request_id (the chat UUID) and request_id
@@ -102,55 +105,21 @@ export function useSessionEvents(sessionId: string) {
 
           // If the stream ended without delivering any events, the connection
           // likely failed silently (e.g. 404 with sseMaxRetryAttempts: 1).
-          // Treat it as an error so backoff and error counting apply.
+          // Back off and reconnect; do NOT synthesize a terminal Error — doing
+          // so used to make any in-flight chat session fail permanently after
+          // ~1 minute of disconnect (issue #8717).
           if (!receivedEvent) {
-            consecutiveErrors++;
-            console.warn(
-              `SSE stream ended with no events (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`
-            );
-            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-              console.error('SSE reconnect limit reached, notifying active listeners');
-              const errorEvent: SessionEvent = {
-                type: 'Error',
-                error: 'Lost connection to server',
-              } as SessionEvent;
-              for (const [routingId, handlers] of listenersRef.current) {
-                for (const handler of handlers) {
-                  handler({ ...errorEvent, request_id: routingId, chat_request_id: routingId });
-                }
-              }
-              consecutiveErrors = 0;
-            }
             await new Promise((r) => setTimeout(r, retryDelay));
             retryDelay = Math.min(retryDelay * 2, MAX_RETRY_DELAY);
           }
         } catch (error) {
           if (abortController.signal.aborted) break;
-          consecutiveErrors++;
-          console.warn(
-            `SSE connection error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}), reconnecting:`,
-            error,
-          );
+          console.warn('SSE connection error, reconnecting:', error);
           setConnected(false);
 
-          if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-            console.error('SSE reconnect limit reached, notifying active listeners');
-            // Send an error event to all active listeners so they can
-            // transition out of streaming state. Reset the counter so
-            // the loop keeps reconnecting for future requests.
-            const errorEvent: SessionEvent = {
-              type: 'Error',
-              error: 'Lost connection to server',
-            } as SessionEvent;
-            for (const [routingId, handlers] of listenersRef.current) {
-              for (const handler of handlers) {
-                handler({ ...errorEvent, request_id: routingId, chat_request_id: routingId });
-              }
-            }
-            consecutiveErrors = 0;
-          }
-
-          // Back off before retrying
+          // Back off before retrying. We deliberately keep reconnecting
+          // forever rather than giving up, so that idle windows transparently
+          // resume their SSE stream when the renderer wakes from suspension.
           await new Promise((r) => setTimeout(r, retryDelay));
           retryDelay = Math.min(retryDelay * 2, MAX_RETRY_DELAY);
         }
@@ -168,25 +137,22 @@ export function useSessionEvents(sessionId: string) {
     };
   }, [sessionId]);
 
-  const addListener = useCallback(
-    (requestId: string, handler: EventHandler): (() => void) => {
-      if (!listenersRef.current.has(requestId)) {
-        listenersRef.current.set(requestId, new Set());
-      }
-      listenersRef.current.get(requestId)!.add(handler);
+  const addListener = useCallback((requestId: string, handler: EventHandler): (() => void) => {
+    if (!listenersRef.current.has(requestId)) {
+      listenersRef.current.set(requestId, new Set());
+    }
+    listenersRef.current.get(requestId)!.add(handler);
 
-      return () => {
-        const set = listenersRef.current.get(requestId);
-        if (set) {
-          set.delete(handler);
-          if (set.size === 0) {
-            listenersRef.current.delete(requestId);
-          }
+    return () => {
+      const set = listenersRef.current.get(requestId);
+      if (set) {
+        set.delete(handler);
+        if (set.size === 0) {
+          listenersRef.current.delete(requestId);
         }
-      };
-    },
-    []
-  );
+      }
+    };
+  }, []);
 
   const setActiveRequestsHandler = useCallback((handler: ActiveRequestsHandler | null) => {
     activeRequestsHandlerRef.current = handler;
