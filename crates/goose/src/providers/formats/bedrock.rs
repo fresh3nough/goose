@@ -381,24 +381,25 @@ pub fn from_bedrock_content_block(block: &bedrock::ContentBlock) -> Result<Optio
             bail!("CachePoint blocks should have been filtered out during message processing")
         }
         bedrock::ContentBlock::Audio(_)
+        | bedrock::ContentBlock::CitationsContent(_)
         | bedrock::ContentBlock::Document(_)
         | bedrock::ContentBlock::GuardContent(_)
         | bedrock::ContentBlock::Image(_)
+        | bedrock::ContentBlock::SearchResult(_)
         | bedrock::ContentBlock::Video(_) => bail!(
             "Unsupported Bedrock content block type: {}",
             bedrock_content_block_kind(block)
         ),
         other => {
-            // Forward-compatibility for future SDK additions (the
-            // `non_exhaustive` `Unknown` arm and any not-yet-released
-            // variants). Surface a warning instead of bailing so the caller
-            // does not break against an updated SDK before we add explicit
-            // handling, but still record it for operators.
-            tracing::warn!(
-                "Skipping unrecognised Bedrock content block: {:?}",
+            // Reserved for the SDK's `non_exhaustive` `Unknown` arm and
+            // future variants the SDK adds before this match is updated.
+            // Bail rather than silently dropping the block so an out-of-date
+            // SDK match arm cannot truncate assistant output without the
+            // caller noticing.
+            bail!(
+                "Unrecognised Bedrock content block variant: {}",
                 bedrock_content_block_kind(other)
             );
-            None
         }
     })
 }
@@ -437,10 +438,12 @@ fn bedrock_content_block_kind(block: &bedrock::ContentBlock) -> &'static str {
     match block {
         bedrock::ContentBlock::Audio(_) => "Audio",
         bedrock::ContentBlock::CachePoint(_) => "CachePoint",
+        bedrock::ContentBlock::CitationsContent(_) => "CitationsContent",
         bedrock::ContentBlock::Document(_) => "Document",
         bedrock::ContentBlock::GuardContent(_) => "GuardContent",
         bedrock::ContentBlock::Image(_) => "Image",
         bedrock::ContentBlock::ReasoningContent(_) => "ReasoningContent",
+        bedrock::ContentBlock::SearchResult(_) => "SearchResult",
         bedrock::ContentBlock::Text(_) => "Text",
         bedrock::ContentBlock::ToolResult(_) => "ToolResult",
         bedrock::ContentBlock::ToolUse(_) => "ToolUse",
@@ -728,6 +731,24 @@ mod tests {
             "got: {msg}"
         );
         assert!(msg.contains("Image"), "got: {msg}");
+    }
+
+    #[test]
+    fn test_from_bedrock_content_block_citations_content_errors() {
+        // CitationsContent and SearchResult are real Bedrock variants that
+        // Goose does not yet model. They must surface an error rather than
+        // silently fall through the unknown-variant arm and be dropped.
+        let citations = bedrock::CitationsContentBlock::builder().build();
+        let content_block = bedrock::ContentBlock::CitationsContent(citations);
+
+        let err =
+            from_bedrock_content_block(&content_block).expect_err("CitationsContent should error");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Unsupported Bedrock content block type"),
+            "got: {msg}"
+        );
+        assert!(msg.contains("CitationsContent"), "got: {msg}");
     }
 
     #[test]
