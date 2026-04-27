@@ -183,7 +183,7 @@ pub fn get_changed_files(path: &str) -> Result<Vec<ChangedFile>> {
 
         let index_status = line.as_bytes()[0];
         let worktree_status = line.as_bytes()[1];
-        let file_path = unquote_porcelain(line[3..].trim());
+        let file_path = unquote_porcelain(line.get(3..).unwrap_or_default().trim());
         let file_path = if file_path.contains(" -> ") {
             file_path
                 .split(" -> ")
@@ -476,19 +476,15 @@ fn parse_numstat(output: &str) -> std::collections::HashMap<String, (u32, u32)> 
 }
 
 fn unquote_porcelain(s: &str) -> String {
-    if s.starts_with('"') && s.ends_with('"') && s.len() >= 2 {
-        s[1..s.len() - 1].to_string()
-    } else {
-        s.to_string()
-    }
+    s.strip_prefix('"')
+        .and_then(|inner| inner.strip_suffix('"'))
+        .map(str::to_string)
+        .unwrap_or_else(|| s.to_string())
 }
 
 fn expand_rename_path(path: &str) -> String {
-    if let Some(brace_start) = path.find('{') {
-        if let Some(brace_end) = path.find('}') {
-            let prefix = &path[..brace_start];
-            let inner = &path[brace_start + 1..brace_end];
-            let suffix = &path[brace_end + 1..];
+    if let Some((prefix, rest)) = path.split_once('{') {
+        if let Some((inner, suffix)) = rest.split_once('}') {
             let new_name = inner.split(" => ").last().unwrap_or(inner);
             return format!("{}{}{}", prefix, new_name, suffix);
         }
